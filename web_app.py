@@ -38,7 +38,7 @@ def get_user_stats(user_id: int):
             "skin": result[3] if result[3] else "🦆"
         }
     else:
-        # Создаём нового пользователя, если его нет
+        # Создаём нового пользователя
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
@@ -80,6 +80,7 @@ async def mini_app(request: Request, user_id: int = None):
     
     stats = get_user_stats(user_id)
     
+    # ПРАВИЛЬНЫЙ вызов TemplateResponse
     return templates.TemplateResponse(
         "game.html",
         {
