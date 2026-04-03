@@ -1,9 +1,8 @@
-import asyncio
+import sqlite3
 from datetime import datetime
-from aiogram import Router, Bot, types
+from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
-from aiogram.fsm.context import FSMContext
 
 from database import *
 from keyboards import *
@@ -11,17 +10,16 @@ from config import BOT_TOKEN, ADMIN_ID
 
 router = Router()
 
-
 # ==================== КОМАНДЫ ====================
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     
-    # Проверяем реферальный параметр
-    args = message.get_args()
-    if args and args.startswith("ref_"):
-        referrer_id = int(args.split("_")[1])
+    # В aiogram 3.x нет get_args(), используем текст команды
+    args = message.text.split()
+    if len(args) > 1 and args[1].startswith("ref_"):
+        referrer_id = int(args[1].split("_")[1])
         if referrer_id != user_id:
             add_referral(referrer_id, user_id)
     
@@ -39,12 +37,19 @@ async def cmd_start(message: types.Message):
 
 @router.message(Command("donate"))
 async def cmd_donate(message: types.Message):
-    args = message.get_args()
-    if not args or not args.isdigit():
+    # В aiogram 3.x аргументы команды можно получить через .split()
+    parts = message.text.split()
+    
+    if len(parts) < 2:
         await message.answer("❌ Используй: `/donate <количество звезд>`\nПример: `/donate 100`", parse_mode="Markdown")
         return
     
-    amount = int(args)
+    if not parts[1].isdigit():
+        await message.answer("❌ Сумма должна быть числом!\nПример: `/donate 100`", parse_mode="Markdown")
+        return
+    
+    amount = int(parts[1])
+    
     if amount < 1 or amount > 2500:
         await message.answer("❌ Сумма должна быть от 1 до 2500 звезд")
         return
@@ -87,7 +92,7 @@ async def handle_tap(callback: types.CallbackQuery):
     
     # Получаем бонус от скина
     skin_bonus = 0
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect("zeta_clicker.db")
     cursor = conn.cursor()
     cursor.execute("SELECT tap_bonus FROM skins WHERE emoji = ?", (current_skin,))
     result = cursor.fetchone()
@@ -146,11 +151,6 @@ async def process_successful_payment(message: types.Message):
         f"Ты перевел `{amount} ⭐️`\n"
         f"Баланс пополнен на `{bonus_clicks} кликов`!",
         parse_mode="Markdown"
-    )
-    
-    await message.bot.send_message(
-        ADMIN_ID,
-        f"🔔 Новый донат!\nПользователь: {user_id}\nСумма: {amount} ⭐️\nНачислено: {bonus_clicks} кликов"
     )
 
 
@@ -224,3 +224,161 @@ async def handle_equip_skin(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка", show_alert=True)
     
     await handle_shop(callback)
+
+
+@router.callback_query(lambda c: c.data == "referrals")
+async def handle_referrals(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    count = get_referral_count(user_id)
+    
+    bot_username = (await callback.bot.get_me()).username
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    
+    text = (
+        f"👥 **Реферальная система**\n\n"
+        f"Ты пригласил: `{count}` друзей\n"
+        f"За каждого друга ты получишь `1000` кликов!\n\n"
+        f"🔗 **Твоя реферальная ссылка:**\n"
+        f"`{referral_link}`\n\n"
+        f"👇 Отправь её друзьям и получай награду!"
+    )
+    
+    await callback.message.edit_text(text, reply_markup=get_referral_keyboard(), parse_mode="Markdown")
+
+
+@router.callback_query(lambda c: c.data == "claim_referral")
+async def handle_claim_referral(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    reward = claim_referral_reward(user_id)
+    
+    if reward == 0:
+        await callback.answer("😢 Нет новых рефералов для награды!", show_alert=True)
+        return
+    
+    await callback.answer(f"🎉 +{reward} кликов за рефералов!", show_alert=True)
+    await back_to_menu(callback)
+
+
+@router.callback_query(lambda c: c.data == "quests")
+async def handle_quests(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    quests = get_daily_quests(user_id)
+    
+    text = "📋 **Ежедневные задания**\n\n"
+    for q in quests:
+        status = "✅" if q['completed'] else "🔄"
+        text += f"{status} **{q['name']}**\n"
+        text += f"   {q['description']}\n"
+        text += f"   Прогресс: {q['progress']}/{q['target']}\n"
+        text += f"   Награда: +{q['reward']} кликов\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+
+
+@router.callback_query(lambda c: c.data == "upgrades")
+async def handle_upgrades(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    _, _, _, tap_power, passive_income, _, _, _, _ = get_user_stats(user_id)
+    
+    tap_price = tap_power * 100
+    passive_price = 500 + passive_income * 100
+    
+    text = (
+        f"💎 **Прокачка**\n\n"
+        f"💪 Сила тапа: +{tap_power} (след. уровень: {tap_price} кликов)\n"
+        f"💰 Пассивный доход: +{passive_income}/час (след. уровень: {passive_price} кликов)\n"
+    )
+    
+    await callback.message.edit_text(text, reply_markup=get_upgrades_keyboard(tap_price, passive_price), parse_mode="Markdown")
+
+
+@router.callback_query(lambda c: c.data == "upgrade_tap")
+async def handle_upgrade_tap(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    success, new_power, price = upgrade_tap_power(user_id)
+    
+    if success:
+        await callback.answer(f"✅ Сила тапа увеличена до +{new_power}!", show_alert=True)
+    else:
+        await callback.answer(f"❌ Не хватает кликов! Нужно: {price}", show_alert=True)
+    
+    await handle_upgrades(callback)
+
+
+@router.callback_query(lambda c: c.data == "upgrade_passive")
+async def handle_upgrade_passive(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    success, new_income, price = upgrade_passive_income(user_id)
+    
+    if success:
+        await callback.answer(f"✅ Пассивный доход увеличен до +{new_income}/час!", show_alert=True)
+    else:
+        await callback.answer(f"❌ Не хватает кликов! Нужно: {price}", show_alert=True)
+    
+    await handle_upgrades(callback)
+
+
+@router.callback_query(lambda c: c.data == "premium")
+async def handle_premium(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    is_prem = is_premium(user_id)
+    premium_until = None
+    
+    if is_prem:
+        conn = sqlite3.connect("zeta_clicker.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT premium_until FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        premium_until = result[0] if result else None
+        conn.close()
+    
+    if is_prem and premium_until:
+        text = f"⭐ **Премиум активен!**\n\nДействует до: {premium_until}\n\nБонусы:\n✅ +50% к пассивному доходу\n✅ Ускоренное восстановление энергии\n✅ Эксклюзивные скины"
+        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    else:
+        text = "⭐ **Премиум подписка**\n\nБонусы:\n✅ +50% к пассивному доходу\n✅ Ускоренное восстановление энергии\n✅ Эксклюзивные скины\n\n💰 Цена: 5000 кликов за 30 дней"
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💎 Купить премиум (5000 кликов)", callback_data="buy_premium")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")]
+        ])
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+
+
+@router.callback_query(lambda c: c.data == "buy_premium")
+async def handle_buy_premium(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    
+    if buy_premium(user_id, 30):
+        await callback.answer("✅ Премиум подписка активирована на 30 дней!", show_alert=True)
+    else:
+        await callback.answer("❌ Не хватает кликов! Нужно 5000", show_alert=True)
+    
+    await handle_premium(callback)
+
+
+@router.callback_query(lambda c: c.data == "leaderboard")
+async def handle_leaderboard(callback: types.CallbackQuery):
+    leaderboard = get_leaderboard(10)
+    
+    if not leaderboard:
+        text = "🏆 **Топ-10 игроков**\n\nПока никого нет, будь первым!"
+    else:
+        text = "🏆 **Топ-10 игроков**\n\n"
+        for i, (user_id, total_clicks) in enumerate(leaderboard, 1):
+            text += f"{i}. `{user_id}` — {total_clicks} кликов\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+
+
+@router.callback_query(lambda c: c.data == "collect_passive")
+async def handle_collect_passive(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    earned = collect_passive_income(user_id)
+    
+    if earned > 0:
+        await callback.answer(f"💰 +{earned} кликов от пассивного дохода!", show_alert=True)
+    else:
+        await callback.answer("😴 Пассивный доход ещё не накоплен. Подожди немного или улучши доход!", show_alert=True)
+    
+    await back_to_menu(callback)
