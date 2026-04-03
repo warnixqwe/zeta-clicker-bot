@@ -1,4 +1,4 @@
- import os
+import os
 import uvicorn
 from web_app import app
 
