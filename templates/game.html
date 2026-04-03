@@ -1,288 +1,55 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-        
-        body {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        .container {
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .stats {
-            background: rgba(255,255,255,0.1);
-            border-radius: 20px;
-            padding: 15px 25px;
-            margin-bottom: 30px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .stats p {
-            color: #fff;
-            font-size: 18px;
-            margin: 5px 0;
-        }
-        
-        .stats span {
-            font-weight: bold;
-            color: #ffd700;
-            font-size: 24px;
-        }
-        
-        .duck {
-            font-size: 150px;
-            cursor: pointer;
-            transition: transform 0.1s ease;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
-        }
-        
-        .duck:active {
-            transform: scale(0.95);
-        }
-        
-        .energy-bar {
-            width: 250px;
-            height: 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px;
-            margin: 20px auto;
-            overflow: hidden;
-        }
-        
-        .energy-fill {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, #00ff88, #00cc66);
-            border-radius: 10px;
-            transition: width 0.3s ease;
-        }
-        
-        .tap-value {
-            position: absolute;
-            pointer-events: none;
-            font-size: 24px;
-            font-weight: bold;
-            color: #ffd700;
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
-            animation: floatUp 0.8s ease-out forwards;
-        }
-        
-        @keyframes floatUp {
-            0% {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-            100% {
-                opacity: 0;
-                transform: translateY(-100px) scale(1.5);
-            }
-        }
-        
-        .level-badge {
-            background: #ffd700;
-            color: #1a1a2e;
-            border-radius: 20px;
-            padding: 5px 15px;
-            display: inline-block;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        
-        button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            color: white;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: transform 0.2s;
-        }
-        
-        button:active {
-            transform: scale(0.95);
-        }
-    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="stats">
-            <p>{{ skin }} Уровень <span id="level">{{ level }}</span></p>
-            <p>💰 Клики: <span id="clicks">{{ clicks }}</span></p>
-            <p>💪 Сила клика: <span id="tapPower">+{{ tap_power }}</span></p>
-        </div>
-        
-        <div class="duck" id="duck">
-            {{ skin }}
-        </div>
-        
-        <div class="energy-bar">
-            <div class="energy-fill" id="energyFill" style="width: 100%"></div>
-        </div>
-        
-        <div class="level-badge" id="levelBadge">
-            Уровень {{ level }}
-        </div>
-        
-        <button onclick="closeApp()">✖️ Закрыть</button>
-    </div>
+    <h1>🦆 Zeta Clicker</h1>
+    <p>User ID: <span id="userId">{{ user_id }}</span></p>
+    <p>Clicks: <span id="clicks">{{ clicks }}</span></p>
+    <p>Level: <span id="level">{{ level }}</span></p>
+    <p>Tap Power: +<span id="tapPower">{{ tap_power }}</span></p>
+    <p>Skin: <span id="skin">{{ skin }}</span></p>
+    <button onclick="clickDuck()">Click!</button>
     
     <script>
-        // Инициализация Telegram WebApp
         const tg = window.Telegram.WebApp;
         tg.ready();
-        tg.expand();
-        tg.enableClosingConfirmation();
         
-        // Данные пользователя из шаблона
-        const userId = {{ user_id }};
         let clicks = {{ clicks }};
         let level = {{ level }};
         let tapPower = {{ tap_power }};
-        let energy = 1000;
-        let maxEnergy = 1000;
+        const userId = {{ user_id }};
         
-        // DOM элементы
-        const duck = document.getElementById('duck');
-        const clicksSpan = document.getElementById('clicks');
-        const levelSpan = document.getElementById('level');
-        const tapPowerSpan = document.getElementById('tapPower');
-        const energyFill = document.getElementById('energyFill');
-        const levelBadge = document.getElementById('levelBadge');
-        
-        // Функция для отображения всплывающего числа
-        function showTapValue(x, y, value) {
-            const tapDiv = document.createElement('div');
-            tapDiv.className = 'tap-value';
-            tapDiv.textContent = `+${value}`;
-            tapDiv.style.left = `${x}px`;
-            tapDiv.style.top = `${y}px`;
-            document.body.appendChild(tapDiv);
-            
-            setTimeout(() => {
-                tapDiv.remove();
-            }, 800);
-        }
-        
-        // Функция для обновления интерфейса
         function updateUI() {
-            clicksSpan.textContent = clicks;
-            levelSpan.textContent = level;
-            tapPowerSpan.textContent = `+${tapPower}`;
-            levelBadge.textContent = `Уровень ${level}`;
-            energyFill.style.width = `${(energy / maxEnergy) * 100}%`;
+            document.getElementById('clicks').innerText = clicks;
+            document.getElementById('level').innerText = level;
+            document.getElementById('tapPower').innerText = tapPower;
         }
         
-        // Функция для отправки клика на сервер
-        async function saveClick(increment) {
+        async function clickDuck() {
+            clicks += tapPower;
+            updateUI();
+            
             try {
                 const response = await fetch('/api/click', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        user_id: userId,
-                        clicks: increment
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, clicks: tapPower})
                 });
-                
                 const data = await response.json();
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch (error) {
-                console.error('Error saving click:', error);
+            } catch(e) {
+                console.error(e);
             }
         }
         
-        // Обработчик клика по утке
-        duck.addEventListener('click', async (event) => {
-            if (energy <= 0) {
-                tg.showPopup({
-                    title: '😫 Нет энергии!',
-                    message: 'Подожди немного, энергия восстановится.',
-                    buttons: [{type: 'ok'}]
-                });
-                return;
-            }
-            
-            const rect = duck.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top;
-            
-            duck.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-                duck.style.transform = '';
-            }, 100);
-            
-            showTapValue(x, y, tapPower);
-            
-            energy -= 1;
-            updateUI();
-            
-            await saveClick(tapPower);
-            
-            if (energy === maxEnergy - 1) {
-                startEnergyRegen();
-            }
-        });
-        
-        // Восстановление энергии
-        let regenInterval = null;
-        
-        function startEnergyRegen() {
-            if (regenInterval) clearInterval(regenInterval);
-            
-            regenInterval = setInterval(() => {
-                if (energy < maxEnergy) {
-                    energy = Math.min(energy + 5, maxEnergy);
-                    updateUI();
-                } else {
-                    clearInterval(regenInterval);
-                    regenInterval = null;
-                }
-            }, 1000);
-        }
-        
-        function closeApp() {
-            tg.close();
-        }
-        
-        if (energy < maxEnergy) {
-            startEnergyRegen();
-        }
-        
-        if (tg.colorScheme === 'dark') {
-            document.body.style.background = 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%)';
-        }
-        
-        tg.showPopup({
-            title: '🦆 Добро пожаловать в Zeta Clicker!',
-            message: `Твой ID: ${userId}\nУровень: ${level}\nСила клика: +${tapPower}\n\nКликай по утке, чтобы зарабатывать клики!`,
-            buttons: [{type: 'ok'}]
-        });
+        updateUI();
     </script>
 </body>
 </html>

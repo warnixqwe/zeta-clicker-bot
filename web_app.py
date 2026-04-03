@@ -11,12 +11,10 @@ app = FastAPI()
 # Настройка шаблонов
 templates = Jinja2Templates(directory="templates")
 
-# Модель для данных от Mini App
 class ClickData(BaseModel):
     user_id: int
     clicks: int
 
-# База данных
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def get_user_stats(user_id: int):
@@ -65,8 +63,6 @@ def update_clicks(user_id: int, increment: int):
     conn.close()
     return True
 
-# ==================== РОУТЫ ====================
-
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(request: Request, user_id: int = None):
     if not user_id:
@@ -74,7 +70,7 @@ async def mini_app(request: Request, user_id: int = None):
     
     stats = get_user_stats(user_id)
     
-    # ПРАВИЛЬНЫЙ ВЫЗОВ
+    # Упрощённый вызов
     return templates.TemplateResponse(
         "game.html",
         {
