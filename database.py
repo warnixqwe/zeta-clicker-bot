@@ -6,9 +6,11 @@ from typing import Tuple, List, Dict
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def init_db():
+    """Инициализация базы данных — создаёт все таблицы, если их нет"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
+    # Таблица пользователей
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -25,6 +27,7 @@ def init_db():
         )
     """)
     
+    # Таблица рефералов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             referrer_id INTEGER,
@@ -34,6 +37,7 @@ def init_db():
         )
     """)
     
+    # Таблица заданий
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS quests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +48,7 @@ def init_db():
         )
     """)
     
+    # Таблица прогресса заданий пользователей
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_quests (
             user_id INTEGER,
@@ -55,6 +60,7 @@ def init_db():
         )
     """)
     
+    # Таблица скинов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS skins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +71,7 @@ def init_db():
         )
     """)
     
+    # Таблица купленных скинов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_skins (
             user_id INTEGER,
@@ -75,6 +82,7 @@ def init_db():
     
     conn.commit()
     
+    # Добавляем скины по умолчанию
     cursor.execute("SELECT COUNT(*) FROM skins")
     if cursor.fetchone()[0] == 0:
         default_skins = [
@@ -87,6 +95,7 @@ def init_db():
         cursor.executemany("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES (?, ?, ?, ?)", default_skins)
         conn.commit()
     
+    # Добавляем задания по умолчанию
     cursor.execute("SELECT COUNT(*) FROM quests")
     if cursor.fetchone()[0] == 0:
         default_quests = [
@@ -100,6 +109,7 @@ def init_db():
     conn.close()
 
 def get_user_stats(user_id: int) -> Tuple:
+    """Получить статистику пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, premium_until, current_skin, total_clicks, daily_streak FROM users WHERE user_id = ?", (user_id,))
@@ -112,6 +122,7 @@ def get_user_stats(user_id: int) -> Tuple:
     return result
 
 def update_tap(user_id: int, energy_cost: int = 1, tap_bonus: int = 0) -> Tuple:
+    """Обновление клика"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, level, energy, tap_power, total_clicks FROM users WHERE user_id = ?", (user_id,))
@@ -130,6 +141,7 @@ def update_tap(user_id: int, energy_cost: int = 1, tap_bonus: int = 0) -> Tuple:
     return (new_clicks, new_level, new_energy)
 
 def add_clicks(user_id: int, amount: int):
+    """Добавить клики пользователю (для админа)"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET clicks = clicks + ?, total_clicks = total_clicks + ? WHERE user_id = ?", (amount, amount, user_id))
@@ -137,6 +149,7 @@ def add_clicks(user_id: int, amount: int):
     conn.close()
 
 def collect_passive_income(user_id: int) -> int:
+    """Собрать пассивный доход"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, passive_income, premium_until FROM users WHERE user_id = ?", (user_id,))
@@ -150,6 +163,7 @@ def collect_passive_income(user_id: int) -> int:
     return earned
 
 def claim_daily_bonus(user_id: int) -> Tuple[int, int]:
+    """Получить ежедневный бонус"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT last_daily, daily_streak, clicks FROM users WHERE user_id = ?", (user_id,))
@@ -171,6 +185,7 @@ def claim_daily_bonus(user_id: int) -> Tuple[int, int]:
     return (bonus, daily_streak)
 
 def add_referral(referrer_id: int, referred_id: int) -> bool:
+    """Добавить реферала"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
@@ -183,6 +198,7 @@ def add_referral(referrer_id: int, referred_id: int) -> bool:
         return False
 
 def claim_referral_reward(referrer_id: int) -> int:
+    """Забрать награду за рефералов"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND reward_claimed = 0", (referrer_id,))
@@ -200,6 +216,7 @@ def claim_referral_reward(referrer_id: int) -> int:
     return reward
 
 def get_referral_count(user_id: int) -> int:
+    """Количество рефералов пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ?", (user_id,))
@@ -208,6 +225,7 @@ def get_referral_count(user_id: int) -> int:
     return count
 
 def get_skins_list() -> List[Dict]:
+    """Список всех скинов"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, emoji, price_clicks, tap_bonus FROM skins")
@@ -216,6 +234,7 @@ def get_skins_list() -> List[Dict]:
     return [{'id': s[0], 'name': s[1], 'emoji': s[2], 'price': s[3], 'bonus': s[4]} for s in skins]
 
 def get_user_skins(user_id: int) -> List[int]:
+    """Список ID купленных скинов пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
@@ -224,6 +243,7 @@ def get_user_skins(user_id: int) -> List[int]:
     return [s[0] for s in skins]
 
 def buy_skin(user_id: int, skin_id: int) -> bool:
+    """Купить скин"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
@@ -244,6 +264,7 @@ def buy_skin(user_id: int, skin_id: int) -> bool:
     return True
 
 def equip_skin(user_id: int, skin_id: int) -> bool:
+    """Экипировать скин"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
@@ -258,6 +279,7 @@ def equip_skin(user_id: int, skin_id: int) -> bool:
     return True
 
 def upgrade_tap_power(user_id: int) -> Tuple[bool, int, int]:
+    """Улучшить силу клика"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, tap_power FROM users WHERE user_id = ?", (user_id,))
@@ -274,6 +296,7 @@ def upgrade_tap_power(user_id: int) -> Tuple[bool, int, int]:
     return (False, tap_power, price)
 
 def upgrade_passive_income(user_id: int) -> Tuple[bool, int, int]:
+    """Улучшить пассивный доход"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, passive_income FROM users WHERE user_id = ?", (user_id,))
@@ -290,6 +313,7 @@ def upgrade_passive_income(user_id: int) -> Tuple[bool, int, int]:
     return (False, passive_income, price)
 
 def get_daily_quests(user_id: int) -> List[Dict]:
+    """Получить ежедневные задания"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     today = datetime.now().date().isoformat()
@@ -308,6 +332,7 @@ def get_daily_quests(user_id: int) -> List[Dict]:
     return result
 
 def get_leaderboard(limit: int = 10) -> List[Tuple]:
+    """Топ игроков"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
@@ -316,6 +341,7 @@ def get_leaderboard(limit: int = 10) -> List[Tuple]:
     return result
 
 def get_user_rank(user_id: int) -> int:
+    """Место пользователя в рейтинге"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT total_clicks FROM users WHERE user_id = ?", (user_id,))
@@ -326,6 +352,7 @@ def get_user_rank(user_id: int) -> int:
     return rank
 
 def is_premium(user_id: int) -> bool:
+    """Проверка премиум статуса"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT premium_until FROM users WHERE user_id = ?", (user_id,))
@@ -336,6 +363,7 @@ def is_premium(user_id: int) -> bool:
     return False
 
 def buy_premium(user_id: int, days: int = 30) -> bool:
+    """Купить премиум"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     price = days * 500

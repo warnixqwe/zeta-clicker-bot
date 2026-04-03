@@ -4,8 +4,6 @@ from datetime import datetime
 from aiogram import Router, types, Bot
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery, WebAppInfo
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
 from database import *
 from keyboards import *
@@ -13,12 +11,6 @@ from config import BOT_TOKEN, ADMIN_ID
 
 router = Router()
 bot = Bot(token=BOT_TOKEN)
-
-# ==================== СОСТОЯНИЯ ДЛЯ АДМИН-ПАНЕЛИ ====================
-class AdminStates(StatesGroup):
-    waiting_for_broadcast = State()
-    waiting_for_user_id_clicks = State()
-    waiting_for_clicks_amount = State()
 
 # ==================== КОМАНДЫ ПОЛЬЗОВАТЕЛЯ ====================
 
@@ -42,13 +34,6 @@ async def cmd_start(message: types.Message):
         f"💰 **Кликай по кнопке КВАК, зарабатывай клики и прокачивай свою утку!**\n\n"
         f"📊 **Твой ID:** `{user_id}`\n"
         f"🎮 **Мини-игра:** `/game`\n\n"
-        f"🔥 **Фичи:**\n"
-        f"• Ежедневные бонусы\n"
-        f"• Реферальная система\n"
-        f"• Магазин скинов\n"
-        f"• Прокачка силы клика и пассивного дохода\n"
-        f"• Топ игроков\n"
-        f"• Пассивный доход\n\n"
         f"👇 **Жми на кнопки и становись лучшим!**",
         reply_markup=get_main_keyboard(),
         parse_mode="Markdown"
@@ -67,12 +52,6 @@ async def cmd_game(message: types.Message):
     await message.answer(
         "🦆 **Zeta Clicker — Mini App версия!**\n\n"
         "Нажми на кнопку ниже, чтобы открыть игру с живыми анимациями!\n\n"
-        "✨ **Фичи Mini App:**\n"
-        "• Живая анимация клика\n"
-        "• Система энергии\n"
-        "• Уровни и прокачка\n"
-        "• Всплывающие числа\n"
-        "• Кроссплатформенный интерфейс\n\n"
         "🚀 **Погнали!**",
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -136,8 +115,6 @@ async def cmd_admin(message: types.Message):
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="💰 Добавить клики", callback_data="admin_add_clicks")],
-        [InlineKeyboardButton(text="📦 Управление скинами", callback_data="admin_skins")],
-        [InlineKeyboardButton(text="📋 Управление заданиями", callback_data="admin_quests")],
         [InlineKeyboardButton(text="◀️ На главную", callback_data="main_menu")]
     ])
     
@@ -163,8 +140,6 @@ async def admin_stats(callback: types.CallbackQuery):
     available_clicks = cursor.fetchone()[0] or 0
     cursor.execute("SELECT COUNT(*) FROM referrals")
     total_refs = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM user_skins")
-    total_skins_bought = cursor.fetchone()[0]
     conn.close()
     
     text = (
@@ -173,7 +148,6 @@ async def admin_stats(callback: types.CallbackQuery):
         f"💎 Всего накликано: `{total_clicks}`\n"
         f"💰 Доступно кликов: `{available_clicks}`\n"
         f"👥 Всего рефералов: `{total_refs}`\n"
-        f"👕 Куплено скинов: `{total_skins_bought}`\n"
     )
     
     await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
@@ -242,32 +216,37 @@ async def admin_add_clicks_start(callback: types.CallbackQuery):
     
     await callback.message.edit_text(
         "💰 **Добавление кликов**\n\n"
-        "Отправь ID пользователя:",
+        "Отправь ID пользователя и количество кликов через пробел.\n"
+        "Пример: `123456789 1000`\n\n"
+        "Для отмены отправь `/cancel`",
         reply_markup=get_back_keyboard(),
         parse_mode="Markdown"
     )
     await callback.answer()
 
-@router.message(lambda message: message.from_user.id == ADMIN_ID and message.text and message.text.isdigit())
-async def admin_add_clicks_user_id(message: types.Message):
-    user_id = int(message.text)
+@router.message(lambda message: message.from_user.id == ADMIN_ID and not message.text.startswith('/'))
+async def admin_add_clicks_process(message: types.Message):
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        await message.answer("❌ Неверный формат! Используй: `ID количество`\nПример: `123456789 1000`", parse_mode="Markdown")
+        return
+    
+    user_id = int(parts[0])
+    amount = int(parts[1])
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
     if not cursor.fetchone():
-        await message.answer("❌ Пользователь не найден!")
+        await message.answer(f"❌ Пользователь с ID `{user_id}` не найден!", parse_mode="Markdown")
+        conn.close()
         return
     conn.close()
     
-    await message.answer(f"💰 Пользователь `{user_id}` найден.\nОтправь количество кликов для начисления:", parse_mode="Markdown")
+    add_clicks(user_id, amount)
+    await message.answer(f"✅ Пользователю `{user_id}` начислено `{amount}` кликов!", parse_mode="Markdown")
 
-@router.message(lambda message: message.from_user.id == ADMIN_ID and message.text and message.text.isdigit())
-async def admin_add_clicks_amount(message: types.Message):
-    # Этот хендлер сработает, но нужно хранить состояние — упростим
-    await message.answer("❌ Сначала укажи ID пользователя командой /admin и выбери пункт 'Добавить клики'")
-
-# ==================== ПЛАТЕЖИ (TELEGRAM STARS) ====================
+# ==================== ПЛАТЕЖИ ====================
 
 @router.pre_checkout_query()
 async def process_pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
@@ -284,12 +263,11 @@ async def process_successful_payment(message: types.Message):
     await message.answer(
         f"✅ **Спасибо за донат!**\n\n"
         f"Ты перевел `{amount} ⭐️`\n"
-        f"💰 Баланс пополнен на `{bonus_clicks} кликов`!\n\n"
-        f"🔥 Продолжай кликать!",
+        f"💰 Баланс пополнен на `{bonus_clicks} кликов`!",
         parse_mode="Markdown"
     )
 
-# ==================== ОСНОВНЫЕ ОБРАБОТЧИКИ (КНОПКИ) ====================
+# ==================== ОСНОВНЫЕ ОБРАБОТЧИКИ ====================
 
 @router.callback_query(lambda c: c.data == "tap")
 async def handle_tap(callback: types.CallbackQuery):
@@ -312,14 +290,14 @@ async def handle_tap(callback: types.CallbackQuery):
     
     new_clicks, new_level, new_energy = update_tap(user_id, 1, skin_bonus)
     
-    await callback.answer("🦆 КВАК! +1 клик", show_alert=False)
+    await callback.answer("🦆 КВАК!", show_alert=False)
     await callback.message.edit_text(
         f"🦆 **Zeta Clicker**\n\n"
         f"📊 Клики: `{new_clicks}`\n"
         f"🏆 Уровень: `{new_level}`\n"
         f"⚡ Энергия: `{new_energy}/1000`\n"
         f"💪 Сила тапа: `+{tap_power + skin_bonus}`\n\n"
-        f"👇 **Жми дальше, пока есть энергия!**",
+        f"👇 **Жми дальше!**",
         reply_markup=get_main_keyboard(),
         parse_mode="Markdown"
     )
@@ -335,7 +313,6 @@ async def back_to_menu(callback: types.CallbackQuery):
         f"🏆 Уровень: `{level}`\n"
         f"⚡ Энергия: `{energy}/1000`\n"
         f"💪 Сила тапа: `+{tap_power}`\n\n"
-        f"💰 Пассивный доход: `+{passive_income}/час`\n\n"
         f"👇 **Выбери действие:**",
         reply_markup=get_main_keyboard(),
         parse_mode="Markdown"
@@ -406,188 +383,4 @@ async def handle_referrals(callback: types.CallbackQuery):
     
     await callback.message.edit_text(text, reply_markup=get_referral_keyboard(), parse_mode="Markdown")
 
-@router.callback_query(lambda c: c.data == "claim_referral")
-async def handle_claim_referral(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    reward = claim_referral_reward(user_id)
-    
-    if reward == 0:
-        await callback.answer("😢 Нет новых рефералов для награды!", show_alert=True)
-        return
-    
-    await callback.answer(f"🎉 +{reward} кликов за рефералов!", show_alert=True)
-    await back_to_menu(callback)
-
-@router.callback_query(lambda c: c.data == "quests")
-async def handle_quests(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    quests = get_daily_quests(user_id)
-    
-    text = "📋 **Ежедневные задания**\n\n"
-    for q in quests:
-        status = "✅" if q['completed'] else "🔄"
-        text += f"{status} **{q['name']}**\n"
-        text += f"   {q['description']}\n"
-        text += f"   Прогресс: `{q['progress']}/{q['target']}`\n"
-        text += f"   Награда: `+{q['reward']}` кликов\n\n"
-    
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
-
-@router.callback_query(lambda c: c.data == "shop")
-async def handle_shop(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    skins = get_skins_list()
-    user_skins = get_user_skins(user_id)
-    _, _, _, _, _, _, current_skin, _, _ = get_user_stats(user_id)
-    
-    await callback.message.edit_text(
-        "👕 **Магазин скинов**\n\n"
-        "Выбери скин для своей утки:\n"
-        "🌟 **Золотая утка** — бонус +2 к силе тапа\n"
-        "🤖 **Киберутка** — бонус +5 к силе тапа\n"
-        "👻 **Утка-призрак** — бонус +10 к силе тапа\n"
-        "😈 **Дьявольская утка** — бонус +15 к силе тапа\n",
-        reply_markup=get_shop_keyboard(skins, user_skins, current_skin),
-        parse_mode="Markdown"
-    )
-
-@router.callback_query(lambda c: c.data.startswith("buy_skin_"))
-async def handle_buy_skin(callback: types.CallbackQuery):
-    skin_id = int(callback.data.split("_")[2])
-    user_id = callback.from_user.id
-    
-    if buy_skin(user_id, skin_id):
-        await callback.answer("✅ Скин куплен!", show_alert=True)
-    else:
-        await callback.answer("❌ Не хватает кликов или уже есть", show_alert=True)
-    
-    await handle_shop(callback)
-
-@router.callback_query(lambda c: c.data.startswith("equip_skin_"))
-async def handle_equip_skin(callback: types.CallbackQuery):
-    skin_id = int(callback.data.split("_")[2])
-    user_id = callback.from_user.id
-    
-    if equip_skin(user_id, skin_id):
-        await callback.answer("✅ Скин экипирован!", show_alert=True)
-    else:
-        await callback.answer("❌ Ошибка", show_alert=True)
-    
-    await handle_shop(callback)
-
-@router.callback_query(lambda c: c.data == "upgrades")
-async def handle_upgrades(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    _, _, _, tap_power, passive_income, _, _, _, _ = get_user_stats(user_id)
-    
-    tap_price = tap_power * 100
-    passive_price = 500 + passive_income * 100
-    
-    text = (
-        f"💎 **Прокачка**\n\n"
-        f"💪 Сила тапа: `+{tap_power}`\n"
-        f"   Следующий уровень: `{tap_price}` кликов\n\n"
-        f"💰 Пассивный доход: `+{passive_income}/час`\n"
-        f"   Следующий уровень: `{passive_price}` кликов\n"
-    )
-    
-    await callback.message.edit_text(text, reply_markup=get_upgrades_keyboard(tap_price, passive_price), parse_mode="Markdown")
-
-@router.callback_query(lambda c: c.data == "upgrade_tap")
-async def handle_upgrade_tap(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    success, new_power, price = upgrade_tap_power(user_id)
-    
-    if success:
-        await callback.answer(f"✅ Сила тапа увеличена до +{new_power}!", show_alert=True)
-    else:
-        await callback.answer(f"❌ Не хватает кликов! Нужно: {price}", show_alert=True)
-    
-    await handle_upgrades(callback)
-
-@router.callback_query(lambda c: c.data == "upgrade_passive")
-async def handle_upgrade_passive(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    success, new_income, price = upgrade_passive_income(user_id)
-    
-    if success:
-        await callback.answer(f"✅ Пассивный доход увеличен до +{new_income}/час!", show_alert=True)
-    else:
-        await callback.answer(f"❌ Не хватает кликов! Нужно: {price}", show_alert=True)
-    
-    await handle_upgrades(callback)
-
-@router.callback_query(lambda c: c.data == "premium")
-async def handle_premium(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    is_prem = is_premium(user_id)
-    
-    if is_prem:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT premium_until FROM users WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-        premium_until = result[0] if result else None
-        conn.close()
-        
-        text = (
-            f"⭐ **Премиум активен!**\n\n"
-            f"Действует до: `{premium_until}`\n\n"
-            f"✨ **Бонусы:**\n"
-            f"• +50% к пассивному доходу\n"
-            f"• Ускоренное восстановление энергии\n"
-            f"• Эксклюзивные скины"
-        )
-        await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
-    else:
-        text = (
-            f"⭐ **Премиум подписка**\n\n"
-            f"✨ **Бонусы:**\n"
-            f"• +50% к пассивному доходу\n"
-            f"• Ускоренное восстановление энергии\n"
-            f"• Эксклюзивные скины\n\n"
-            f"💰 Цена: `5000` кликов за 30 дней"
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💎 Купить премиум (5000 кликов)", callback_data="buy_premium")],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")]
-        ])
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
-
-@router.callback_query(lambda c: c.data == "buy_premium")
-async def handle_buy_premium(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    
-    if buy_premium(user_id, 30):
-        await callback.answer("✅ Премиум подписка активирована на 30 дней!", show_alert=True)
-    else:
-        await callback.answer("❌ Не хватает кликов! Нужно 5000", show_alert=True)
-    
-    await handle_premium(callback)
-
-@router.callback_query(lambda c: c.data == "leaderboard")
-async def handle_leaderboard(callback: types.CallbackQuery):
-    leaderboard = get_leaderboard(10)
-    
-    if not leaderboard:
-        text = "🏆 **Топ-10 игроков**\n\nПока никого нет, будь первым!"
-    else:
-        text = "🏆 **Топ-10 игроков**\n\n"
-        for i, (user_id, total_clicks) in enumerate(leaderboard, 1):
-            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            text += f"{medal} `{user_id}` — `{total_clicks}` кликов\n"
-    
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
-
-@router.callback_query(lambda c: c.data == "collect_passive")
-async def handle_collect_passive(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    earned = collect_passive_income(user_id)
-    
-    if earned > 0:
-        await callback.answer(f"💰 +{earned} кликов от пассивного дохода!", show_alert=True)
-    else:
-        await callback.answer("😴 Пассивный доход ещё не накоплен. Подожди немного или улучши доход!", show_alert=True)
-    
-    await back_to_menu(callback)
+@router.callback_query(lambda c

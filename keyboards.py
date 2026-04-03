@@ -25,9 +25,7 @@ def get_main_keyboard():
     return keyboard
 
 def get_back_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀️ На главную", callback_data="main_menu")]
-    ])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="◀️ На главную", callback_data="main_menu")]])
 
 def get_shop_keyboard(skins, user_skins, current_skin_emoji):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
