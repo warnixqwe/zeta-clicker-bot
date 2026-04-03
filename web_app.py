@@ -1,12 +1,10 @@
 import os
-import json
 import sqlite3
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-import uvicorn
 
 app = FastAPI()
 
@@ -40,7 +38,7 @@ def get_user_stats(user_id: int):
             "skin": result[3] if result[3] else "🦆"
         }
     else:
-        # Создаём нового пользователя
+        # Создаём нового пользователя, если его нет
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
