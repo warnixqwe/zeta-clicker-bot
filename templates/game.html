@@ -1,55 +1,352 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .stats-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 28px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            color: #fff;
+            font-size: 16px;
+        }
+
+        .stats-label {
+            opacity: 0.7;
+        }
+
+        .stats-value {
+            font-weight: bold;
+            color: #ffd700;
+            font-size: 20px;
+        }
+
+        .duck-container {
+            position: relative;
+            margin: 20px 0;
+        }
+
+        .duck {
+            font-size: 180px;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+            filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.3));
+            display: inline-block;
+        }
+
+        .duck:active {
+            transform: scale(0.92);
+        }
+
+        .energy-section {
+            margin: 20px 0;
+        }
+
+        .energy-text {
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .energy-bar {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .energy-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc66);
+            border-radius: 12px;
+            transition: width 0.2s ease;
+        }
+
+        .level-badge {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #1a1a2e;
+            border-radius: 40px;
+            padding: 8px 20px;
+            display: inline-block;
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        button {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9));
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 40px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: transform 0.2s, opacity 0.2s;
+            backdrop-filter: blur(5px);
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        .tap-value {
+            position: fixed;
+            pointer-events: none;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: floatUp 0.6s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(0.8);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-120px) scale(1.4);
+            }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 14px;
+            z-index: 1000;
+            animation: fadeOut 2s ease forwards;
+            pointer-events: none;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; visibility: hidden; }
+        }
+    </style>
 </head>
 <body>
-    <h1>🦆 Zeta Clicker</h1>
-    <p>User ID: <span id="userId">{{ user_id }}</span></p>
-    <p>Clicks: <span id="clicks">{{ clicks }}</span></p>
-    <p>Level: <span id="level">{{ level }}</span></p>
-    <p>Tap Power: +<span id="tapPower">{{ tap_power }}</span></p>
-    <p>Skin: <span id="skin">{{ skin }}</span></p>
-    <button onclick="clickDuck()">Click!</button>
-    
+    <div class="container">
+        <div class="stats-card">
+            <div class="stats-row">
+                <span class="stats-label">{{ skin }} Уровень</span>
+                <span class="stats-value" id="level">{{ level }}</span>
+            </div>
+            <div class="stats-row">
+                <span class="stats-label">💰 Клики</span>
+                <span class="stats-value" id="clicks">{{ clicks }}</span>
+            </div>
+            <div class="stats-row">
+                <span class="stats-label">💪 Сила клика</span>
+                <span class="stats-value" id="tapPower">+{{ tap_power }}</span>
+            </div>
+        </div>
+
+        <div class="duck-container">
+            <div class="duck" id="duck">
+                {{ skin }}
+            </div>
+        </div>
+
+        <div class="energy-section">
+            <div class="energy-text">⚡ Энергия</div>
+            <div class="energy-bar">
+                <div class="energy-fill" id="energyFill" style="width: 100%"></div>
+            </div>
+        </div>
+
+        <div class="level-badge" id="levelBadge">
+            Уровень {{ level }}
+        </div>
+
+        <button onclick="closeApp()">✖️ Закрыть</button>
+    </div>
+
     <script>
+        // Telegram WebApp
         const tg = window.Telegram.WebApp;
         tg.ready();
-        
+        tg.expand();
+        tg.enableClosingConfirmation();
+
+        // Данные пользователя
+        const userId = {{ user_id }};
         let clicks = {{ clicks }};
         let level = {{ level }};
         let tapPower = {{ tap_power }};
-        const userId = {{ user_id }};
-        
-        function updateUI() {
-            document.getElementById('clicks').innerText = clicks;
-            document.getElementById('level').innerText = level;
-            document.getElementById('tapPower').innerText = tapPower;
+        let skin = "{{ skin }}";
+        let energy = 1000;
+        let maxEnergy = 1000;
+
+        // DOM элементы
+        const duck = document.getElementById('duck');
+        const clicksSpan = document.getElementById('clicks');
+        const levelSpan = document.getElementById('level');
+        const tapPowerSpan = document.getElementById('tapPower');
+        const energyFill = document.getElementById('energyFill');
+        const levelBadge = document.getElementById('levelBadge');
+
+        // Показать всплывающее число
+        function showTapValue(x, y, value) {
+            const div = document.createElement('div');
+            div.className = 'tap-value';
+            div.textContent = `+${value}`;
+            div.style.left = (x - 30) + 'px';
+            div.style.top = (y - 40) + 'px';
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 600);
         }
-        
-        async function clickDuck() {
-            clicks += tapPower;
-            updateUI();
-            
+
+        // Показать уведомление
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        // Обновить интерфейс
+        function updateUI() {
+            clicksSpan.textContent = clicks;
+            levelSpan.textContent = level;
+            tapPowerSpan.textContent = `+${tapPower}`;
+            levelBadge.textContent = `Уровень ${level}`;
+            const energyPercent = (energy / maxEnergy) * 100;
+            energyFill.style.width = energyPercent + '%';
+        }
+
+        // Сохранить клик на сервере
+        async function saveClick(increment) {
             try {
                 const response = await fetch('/api/click', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({user_id: userId, clicks: tapPower})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, clicks: increment })
                 });
                 const data = await response.json();
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch(e) {
-                console.error(e);
+            } catch (error) {
+                console.error('Save error:', error);
             }
         }
-        
-        updateUI();
+
+        // Восстановление энергии
+        let regenInterval = null;
+
+        function startEnergyRegen() {
+            if (regenInterval) clearInterval(regenInterval);
+            regenInterval = setInterval(() => {
+                if (energy < maxEnergy) {
+                    energy = Math.min(energy + 5, maxEnergy);
+                    updateUI();
+                } else {
+                    clearInterval(regenInterval);
+                    regenInterval = null;
+                }
+            }, 1000);
+        }
+
+        // Обработчик клика по утке
+        duck.addEventListener('click', async (event) => {
+            if (energy <= 0) {
+                showToast('😫 Нет энергии! Подожди немного...');
+                return;
+            }
+
+            // Анимация
+            duck.style.transform = 'scale(0.92)';
+            setTimeout(() => { duck.style.transform = ''; }, 100);
+
+            // Всплывающее число
+            const rect = duck.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top;
+            showTapValue(x, y, tapPower);
+
+            // Энергия
+            energy = Math.max(0, energy - 1);
+            updateUI();
+
+            // Сохранить клик
+            await saveClick(tapPower);
+
+            // Запустить регенерацию если нужно
+            if (energy < maxEnergy && !regenInterval) {
+                startEnergyRegen();
+            }
+        });
+
+        // Закрыть приложение
+        function closeApp() {
+            tg.close();
+        }
+
+        // Запуск регенерации если энергия не полная
+        if (energy < maxEnergy) {
+            startEnergyRegen();
+        }
+
+        // Тема Telegram
+        if (tg.colorScheme === 'dark') {
+            document.body.style.background = 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%)';
+        }
+
+        // Приветствие
+        setTimeout(() => {
+            showToast(`🦆 Добро пожаловать! ID: ${userId}`);
+        }, 500);
     </script>
 </body>
 </html>
