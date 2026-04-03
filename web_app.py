@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
@@ -20,7 +19,7 @@ class ClickData(BaseModel):
     clicks: int
 
 # База данных
-DB_PATH = "zeta_clicker.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def get_user_stats(user_id: int):
     """Получает статистику пользователя из БД"""
@@ -41,7 +40,7 @@ def get_user_stats(user_id: int):
             "skin": result[3] if result[3] else "🦆"
         }
     else:
-        # Создаём нового пользователя, если его нет
+        # Создаём нового пользователя
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
@@ -77,12 +76,8 @@ def update_clicks(user_id: int, increment: int):
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(request: Request, user_id: int = None):
-    """
-    Главная страница Mini App.
-    Получает user_id из параметра запроса (Telegram подставляет initData)
-    """
+    """Главная страница Mini App"""
     if not user_id:
-        # Пробуем получить из initData (заглушка для тестов)
         user_id = 1
     
     stats = get_user_stats(user_id)
@@ -101,9 +96,7 @@ async def mini_app(request: Request, user_id: int = None):
 
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    """
-    API для сохранения клика от Mini App
-    """
+    """API для сохранения клика от Mini App"""
     success = update_clicks(data.user_id, data.clicks)
     if success:
         stats = get_user_stats(data.user_id)
@@ -113,23 +106,11 @@ async def handle_click(data: ClickData):
 
 @app.get("/api/stats/{user_id}")
 async def get_stats(user_id: int):
-    """
-    API для получения статистики пользователя
-    """
+    """API для получения статистики пользователя"""
     stats = get_user_stats(user_id)
     return JSONResponse(content=stats)
 
 @app.get("/health")
 async def health_check():
-    """
-    Проверка работоспособности для Railway
-    """
+    """Проверка работоспособности для Railway"""
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
-
-# ==================== ЗАПУСК ====================
-
-if __name__ == "__main__":
-    # Берём порт из переменной окружения Railway, если нет — ставим 8000
-    port = int(os.environ.get("PORT", 8000))
-    # Хост обязательно 0.0.0.0, чтобы Railway мог подключиться
-    uvicorn.run(app, host="0.0.0.0", port=port)

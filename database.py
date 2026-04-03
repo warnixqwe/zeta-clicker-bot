@@ -1,8 +1,9 @@
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from typing import Tuple, List, Dict
 
-DB_PATH = "zeta_clicker.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -430,6 +431,29 @@ def upgrade_tap_power(user_id: int) -> Tuple[bool, int, int]:
         return (True, new_tap_power, price)
     conn.close()
     return (False, tap_power, price)
+
+
+def upgrade_energy(user_id: int) -> Tuple[bool, int, int]:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT clicks, energy FROM users WHERE user_id = ?", (user_id,))
+    clicks, energy = cursor.fetchone()
+    
+    price = (energy // 100) * 100
+    
+    if clicks >= price:
+        new_energy = energy + 100
+        new_clicks = clicks - price
+        cursor.execute(
+            "UPDATE users SET clicks = ?, energy = ? WHERE user_id = ?",
+            (new_clicks, new_energy, user_id)
+        )
+        conn.commit()
+        conn.close()
+        return (True, new_energy, price)
+    conn.close()
+    return (False, energy, price)
 
 
 def upgrade_passive_income(user_id: int) -> Tuple[bool, int, int]:
