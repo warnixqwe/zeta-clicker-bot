@@ -20,7 +20,6 @@ class ClickData(BaseModel):
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def get_user_stats(user_id: int):
-    """Получает статистику пользователя из БД"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
@@ -38,7 +37,6 @@ def get_user_stats(user_id: int):
             "skin": result[3] if result[3] else "🦆"
         }
     else:
-        # Создаём нового пользователя
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
@@ -50,10 +48,8 @@ def get_user_stats(user_id: int):
         return {"clicks": 0, "level": 1, "tap_power": 1, "skin": "🦆"}
 
 def update_clicks(user_id: int, increment: int):
-    """Обновляет клики пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
     cursor.execute("SELECT clicks, total_clicks, level FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     
@@ -61,7 +57,6 @@ def update_clicks(user_id: int, increment: int):
         new_clicks = result[0] + increment
         new_total = result[1] + increment
         new_level = 1 + new_total // 100
-        
         cursor.execute(
             "UPDATE users SET clicks = ?, total_clicks = ?, level = ? WHERE user_id = ?",
             (new_clicks, new_total, new_level, user_id)
@@ -74,13 +69,12 @@ def update_clicks(user_id: int, increment: int):
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(request: Request, user_id: int = None):
-    """Главная страница Mini App"""
     if not user_id:
         user_id = 1
     
     stats = get_user_stats(user_id)
     
-    # ПРАВИЛЬНЫЙ вызов TemplateResponse
+    # ПРАВИЛЬНЫЙ ВЫЗОВ
     return templates.TemplateResponse(
         "game.html",
         {
@@ -95,7 +89,6 @@ async def mini_app(request: Request, user_id: int = None):
 
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    """API для сохранения клика от Mini App"""
     success = update_clicks(data.user_id, data.clicks)
     if success:
         stats = get_user_stats(data.user_id)
@@ -105,11 +98,9 @@ async def handle_click(data: ClickData):
 
 @app.get("/api/stats/{user_id}")
 async def get_stats(user_id: int):
-    """API для получения статистики пользователя"""
     stats = get_user_stats(user_id)
     return JSONResponse(content=stats)
 
 @app.get("/health")
 async def health_check():
-    """Проверка работоспособности для Railway"""
     return {"status": "ok", "timestamp": datetime.now().isoformat()}

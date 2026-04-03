@@ -127,13 +127,13 @@
 <body>
     <div class="container">
         <div class="stats">
-            <p>🦆 {{ skin }} Уровень <span id="level">{{ level }}</span></p>
+            <p>{{ skin }} Уровень <span id="level">{{ level }}</span></p>
             <p>💰 Клики: <span id="clicks">{{ clicks }}</span></p>
             <p>💪 Сила клика: <span id="tapPower">+{{ tap_power }}</span></p>
         </div>
         
         <div class="duck" id="duck">
-            🦆
+            {{ skin }}
         </div>
         
         <div class="energy-bar">
@@ -151,7 +151,7 @@
         // Инициализация Telegram WebApp
         const tg = window.Telegram.WebApp;
         tg.ready();
-        tg.expand(); // Растягиваем на весь экран
+        tg.expand();
         tg.enableClosingConfirmation();
         
         // Данные пользователя из шаблона
@@ -228,28 +228,22 @@
                 return;
             }
             
-            // Получаем координаты клика для анимации
             const rect = duck.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top;
             
-            // Анимация утки
             duck.style.transform = 'scale(0.95)';
             setTimeout(() => {
                 duck.style.transform = '';
             }, 100);
             
-            // Показываем всплывающее число
             showTapValue(x, y, tapPower);
             
-            // Уменьшаем энергию
             energy -= 1;
             updateUI();
             
-            // Отправляем клик на сервер
             await saveClick(tapPower);
             
-            // Восстанавливаем энергию каждую секунду
             if (energy === maxEnergy - 1) {
                 startEnergyRegen();
             }
@@ -272,22 +266,18 @@
             }, 1000);
         }
         
-        // Закрытие Mini App
         function closeApp() {
             tg.close();
         }
         
-        // Запускаем восстановление энергии при старте
         if (energy < maxEnergy) {
             startEnergyRegen();
         }
         
-        // Устанавливаем цветовую тему в соответствии с темой Telegram
         if (tg.colorScheme === 'dark') {
             document.body.style.background = 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%)';
         }
         
-        // Показываем приветственное сообщение
         tg.showPopup({
             title: '🦆 Добро пожаловать в Zeta Clicker!',
             message: `Твой ID: ${userId}\nУровень: ${level}\nСила клика: +${tapPower}\n\nКликай по утке, чтобы зарабатывать клики!`,
