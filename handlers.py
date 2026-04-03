@@ -8,27 +8,12 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPri
 from database import *
 from keyboards import *
 from config import BOT_TOKEN, ADMIN_ID
+print(f"DEBUG: ADMIN_ID = {ADMIN_ID}")
 
 router = Router()
 bot = Bot(token=BOT_TOKEN)
 
 # ==================== КОМАНДЫ ПОЛЬЗОВАТЕЛЯ ====================
-
-# ВРЕМЕННЫЙ ТЕСТ АДМИНКИ - ВСТАВЬ В САМОЕ НАЧАЛО handlers.py
-@router.message(Command("admin"))
-async def test_admin(message: types.Message):
-    user_id = message.from_user.id
-    admin_id_from_env = int(os.getenv("ADMIN_ID", 0))
-    
-    await message.answer(
-        f"🔍 **Тест админки**\n\n"
-        f"Твой ID: `{user_id}`\n"
-        f"ADMIN_ID из .env: `{admin_id_from_env}`\n"
-        f"Совпадают: `{user_id == admin_id_from_env}`\n\n"
-        f"Если не совпадают — проверь .env файл!\n"
-        f"ID можно узнать у @userinfobot",
-        parse_mode="Markdown"
-    )
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
