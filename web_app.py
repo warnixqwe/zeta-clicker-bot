@@ -1012,6 +1012,14 @@ async def mini_app(user_id: int = 1):
                 updateUI();
             }}
         }}, 1000);
+ // Принудительная загрузка для теста
+setTimeout(() => {
+    console.log('Testing API calls...');
+    fetch('/api/get_skins?user_id=' + userId).then(r => r.json()).then(console.log).catch(console.error);
+    fetch('/api/get_cases?user_id=' + userId).then(r => r.json()).then(console.log).catch(console.error);
+    fetch('/api/get_boosters?user_id=' + userId).then(r => r.json()).then(console.log).catch(console.error);
+    fetch('/api/get_achievements?user_id=' + userId).then(r => r.json()).then(console.log).catch(console.error);
+}, 2000);
     </script>
 </body>
 </html>'''
