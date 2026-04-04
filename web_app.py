@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -13,10 +14,177 @@ class ClickData(BaseModel):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
+# ==================== ИНИЦИАЛИЗАЦИЯ БД ====================
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Основная таблица пользователей (добавляем алмазы)
+    cursor.execute("ALTER TABLE users ADD COLUMN gems INTEGER DEFAULT 0")
+    cursor.execute("ALTER TABLE users ADD COLUMN total_gems INTEGER DEFAULT 0")
+    cursor.execute("ALTER TABLE users ADD COLUMN last_booster_time TIMESTAMP DEFAULT NULL")
+    
+    # Таблица достижений
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS achievements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            description TEXT,
+            condition_type TEXT,
+            condition_value INTEGER,
+            reward_gems INTEGER,
+            reward_clicks INTEGER,
+            reward_skin_id INTEGER DEFAULT NULL
+        )
+    """)
+    
+    # Прогресс достижений пользователя
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id INTEGER,
+            achievement_id INTEGER,
+            progress INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            completed_at TIMESTAMP DEFAULT NULL,
+            PRIMARY KEY (user_id, achievement_id)
+        )
+    """)
+    
+    # Таблица кейсов
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            price_gems INTEGER,
+            price_clicks INTEGER
+        )
+    """)
+    
+    # Награды из кейсов
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS case_rewards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id INTEGER,
+            reward_type TEXT,
+            reward_value INTEGER,
+            reward_text TEXT,
+            chance INTEGER
+        )
+    """)
+    
+    # Бустеры
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS boosters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            description TEXT,
+            effect_type TEXT,
+            effect_value REAL,
+            duration_minutes INTEGER,
+            price_gems INTEGER,
+            price_clicks INTEGER
+        )
+    """)
+    
+    # Активные бустеры пользователя
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_boosters (
+            user_id INTEGER,
+            booster_id INTEGER,
+            expires_at TIMESTAMP,
+            PRIMARY KEY (user_id, booster_id)
+        )
+    """)
+    
+    # Турниры
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tournaments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            start_date TIMESTAMP,
+            end_date TIMESTAMP,
+            reward_gems INTEGER,
+            reward_clicks INTEGER,
+            reward_skin_id INTEGER DEFAULT NULL
+        )
+    """)
+    
+    # Участники турниров
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tournament_participants (
+            user_id INTEGER,
+            tournament_id INTEGER,
+            score INTEGER DEFAULT 0,
+            rank INTEGER DEFAULT NULL,
+            reward_claimed INTEGER DEFAULT 0,
+            PRIMARY KEY (user_id, tournament_id)
+        )
+    """)
+    
+    conn.commit()
+    
+    # Добавляем стандартные достижения
+    cursor.execute("SELECT COUNT(*) FROM achievements")
+    if cursor.fetchone()[0] == 0:
+        achievements = [
+            ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500, None),
+            ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000, None),
+            ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000, None),
+            ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500, None),
+            ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000, None),
+            ("Реферал", "Пригласить 1 друга", "referrals", 1, 1, 1000, None),
+            ("Популярный", "Пригласить 5 друзей", "referrals", 5, 5, 5000, None),
+        ]
+        cursor.executemany(
+            "INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks, reward_skin_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            achievements
+        )
+    
+    # Добавляем кейсы
+    cursor.execute("SELECT COUNT(*) FROM cases")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO cases (name, price_gems, price_clicks) VALUES (?, ?, ?)", ("Обычный кейс", 0, 1000))
+        case_id = cursor.lastrowid
+        rewards = [
+            (case_id, "clicks", 100, "100 кликов", 30),
+            (case_id, "clicks", 500, "500 кликов", 20),
+            (case_id, "clicks", 1000, "1000 кликов", 15),
+            (case_id, "clicks", 5000, "5000 кликов", 5),
+            (case_id, "gems", 1, "1 алмаз", 15),
+            (case_id, "gems", 5, "5 алмазов", 8),
+            (case_id, "booster", 1, "x2 клика (30 мин)", 5),
+            (case_id, "skin", 2, "Золотая утка", 2),
+        ]
+        cursor.executemany(
+            "INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)",
+            rewards
+        )
+    
+    # Добавляем бустеры
+    cursor.execute("SELECT COUNT(*) FROM boosters")
+    if cursor.fetchone()[0] == 0:
+        boosters = [
+            ("x2 Клики", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5, 5000),
+            ("Автокликер", "Автоматически кликает 10 раз в секунду", "auto_click", 10, 30, 10, 10000),
+            ("x2 Пассивка", "Удваивает пассивный доход на 1 час", "passive_multiplier", 2, 60, 3, 3000),
+        ]
+        cursor.executemany(
+            "INSERT INTO boosters (name, description, effect_type, effect_value, duration_minutes, price_gems, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            boosters
+        )
+    
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ==================== ФУНКЦИИ ДЛЯ НОВЫХ ФИЧ ====================
+
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     
@@ -28,23 +196,24 @@ def get_user_stats(user_id: int):
             "passive_income": int(result[3]),
             "skin": str(result[4]) if result[4] else "🦆",
             "total_clicks": int(result[5]),
-            "daily_streak": int(result[6])
+            "daily_streak": int(result[6]),
+            "gems": int(result[7])
         }
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (user_id, clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, 0, 1, 1, 0, "🦆", 0, 0)
+            "INSERT INTO users (user_id, clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, 0, 1, 1, 0, "🦆", 0, 0, 0)
         )
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0}
+        return {"clicks": 0, "level": 1, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, total_clicks FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, total_clicks, level FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     if result:
         new_clicks = result[0] + increment
@@ -52,7 +221,140 @@ def update_clicks(user_id: int, increment: int):
         new_level = 1 + new_total // 100
         cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ? WHERE user_id = ?", (new_clicks, new_total, new_level, user_id))
         conn.commit()
+        
+        # Проверка достижений
+        check_achievements(user_id, "clicks", new_total)
     conn.close()
+
+def add_gems(user_id: int, amount: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT gems, total_gems FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if result:
+        new_gems = result[0] + amount
+        new_total = result[1] + amount
+        cursor.execute("UPDATE users SET gems = ?, total_gems = ? WHERE user_id = ?", (new_gems, new_total, user_id))
+        conn.commit()
+    conn.close()
+
+def check_achievements(user_id: int, condition_type: str, current_value: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, condition_type, condition_value, reward_gems, reward_clicks FROM achievements WHERE condition_type = ?", (condition_type,))
+    achievements = cursor.fetchall()
+    
+    for ach in achievements:
+        ach_id, ach_type, ach_value, reward_gems, reward_clicks = ach
+        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
+        result = cursor.fetchone()
+        if not result or result[0] == 0:
+            if current_value >= ach_value:
+                cursor.execute("INSERT OR REPLACE INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES (?, ?, ?, ?, ?)",
+                               (user_id, ach_id, ach_value, 1, datetime.now().isoformat()))
+                add_gems(user_id, reward_gems)
+                cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+                clicks = cursor.fetchone()[0]
+                cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (clicks + reward_clicks, user_id))
+    conn.commit()
+    conn.close()
+
+def open_case(user_id: int, case_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT price_gems, price_clicks FROM cases WHERE id = ?", (case_id,))
+    price_gems, price_clicks = cursor.fetchone()
+    
+    cursor.execute("SELECT clicks, gems FROM users WHERE user_id = ?", (user_id,))
+    clicks, gems = cursor.fetchone()
+    
+    if clicks >= price_clicks and price_clicks > 0:
+        new_clicks = clicks - price_clicks
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+    elif gems >= price_gems and price_gems > 0:
+        new_gems = gems - price_gems
+        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (new_gems, user_id))
+    else:
+        conn.close()
+        return {"success": False, "message": "Не хватает ресурсов"}
+    
+    cursor.execute("SELECT reward_type, reward_value, reward_text FROM case_rewards WHERE case_id = ? ORDER BY random() LIMIT 1", (case_id,))
+    reward_type, reward_value, reward_text = cursor.fetchone()
+    
+    result = {"success": True, "reward_text": reward_text}
+    
+    if reward_type == "clicks":
+        cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+        current_clicks = cursor.fetchone()[0]
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (current_clicks + reward_value, user_id))
+        result["reward"] = f"{reward_value} кликов"
+    elif reward_type == "gems":
+        cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
+        current_gems = cursor.fetchone()[0]
+        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (current_gems + reward_value, user_id))
+        result["reward"] = f"{reward_value} алмазов"
+    elif reward_type == "booster":
+        booster_id = reward_value
+        expires_at = datetime.now() + timedelta(minutes=30)
+        cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)", (user_id, booster_id, expires_at.isoformat()))
+        result["reward"] = reward_text
+    elif reward_type == "skin":
+        skin_id = reward_value
+        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
+        result["reward"] = reward_text
+    
+    conn.commit()
+    conn.close()
+    return result
+
+def get_active_boosters(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute("""
+        SELECT b.id, b.name, b.description, b.effect_type, b.effect_value, b.duration_minutes, 
+               julianday(ub.expires_at) - julianday(?) as minutes_left
+        FROM user_boosters ub
+        JOIN boosters b ON ub.booster_id = b.id
+        WHERE ub.user_id = ? AND ub.expires_at > ?
+    """, (now, user_id, now))
+    result = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "description": r[2], "effect_type": r[3], "effect_value": r[4], "minutes_left": int(r[6])} for r in result]
+
+def get_booster_multiplier(user_id: int):
+    boosters = get_active_boosters(user_id)
+    multiplier = 1.0
+    for b in boosters:
+        if b["effect_type"] == "tap_multiplier":
+            multiplier *= b["effect_value"]
+    return multiplier
+
+def get_achievements(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
+    all_achievements = cursor.fetchall()
+    
+    result = []
+    for ach in all_achievements:
+        ach_id, name, desc, condition, reward_gems, reward_clicks = ach
+        cursor.execute("SELECT completed, completed_at FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
+        progress_data = cursor.fetchone()
+        completed = progress_data[0] if progress_data else 0
+        completed_at = progress_data[1] if progress_data else None
+        result.append({
+            "id": ach_id,
+            "name": name,
+            "description": desc,
+            "condition": condition,
+            "reward_gems": reward_gems,
+            "reward_clicks": reward_clicks,
+            "completed": completed,
+            "completed_at": completed_at
+        })
+    conn.close()
+    return result
 
 # ==================== API ====================
 
@@ -187,6 +489,14 @@ async def buy_skin(user_id: int, skin_id: int):
         cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
         conn.commit()
         conn.close()
+        
+        # Проверка достижения за покупку скинов
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM user_skins WHERE user_id = ?", (user_id,))
+        skins_count = cursor.fetchone()[0]
+        conn.close()
+        check_achievements(user_id, "skins", skins_count)
+        
         return {"success": True, "new_clicks": new_clicks, "skin_name": skins[skin_id]["name"]}
     else:
         conn.close()
@@ -245,6 +555,9 @@ async def get_referrals(user_id: int):
     unclaimed = cursor.fetchone()[0]
     conn.close()
     
+    # Проверка достижения за рефералов
+    check_achievements(user_id, "referrals", count)
+    
     return {"count": count, "unclaimed": unclaimed}
 
 @app.post("/api/claim_referral")
@@ -268,34 +581,57 @@ async def claim_referral(user_id: int):
     
     return {"success": True, "reward": reward}
 
-@app.get("/api/stats/{user_id}")
+@app.post("/api/open_case")
+async def open_case(user_id: int, case_id: int = 1):
+    result = open_case(user_id, case_id)
+    return result
+
+@app.get("/api/get_boosters")
+async def get_boosters(user_id: int):
+    active = get_active_boosters(user_id)
+    return {"boosters": active}
+
+@app.get("/api/get_achievements")
+async def get_achievements_list(user_id: int):
+    achievements = get_achievements(user_id)
+    return {"achievements": achievements}
+
+@app.get("/api/get_stats")
 async def get_stats(user_id: int):
     stats = get_user_stats(user_id)
-    return JSONResponse(content={
+    boosters = get_active_boosters(user_id)
+    tap_multiplier = get_booster_multiplier(user_id)
+    return {
         "clicks": stats["clicks"],
         "level": stats["level"],
         "tap_power": stats["tap_power"],
         "passive_income": stats["passive_income"],
         "skin": stats["skin"],
-        "daily_streak": stats["daily_streak"]
-    })
+        "daily_streak": stats["daily_streak"],
+        "gems": stats["gems"],
+        "boosters": boosters,
+        "tap_multiplier": tap_multiplier
+    }
 
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    update_clicks(data.user_id, data.clicks)
+    multiplier = get_booster_multiplier(data.user_id)
+    final_clicks = int(data.clicks * multiplier)
+    update_clicks(data.user_id, final_clicks)
     stats = get_user_stats(data.user_id)
-    return JSONResponse(content={
+    return {
         "clicks": stats["clicks"],
         "level": stats["level"],
         "tap_power": stats["tap_power"],
-        "passive_income": stats["passive_income"]
-    })
+        "passive_income": stats["passive_income"],
+        "gems": stats["gems"]
+    }
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-# ==================== HTML С ТРЕМЯ ЭКРАНАМИ ====================
+# ==================== HTML С ЭКРАНАМИ ====================
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
@@ -332,15 +668,22 @@ async def mini_app(user_id: int = 1):
         .back-btn {{ background: rgba(255,255,255,0.1); margin-top: 20px; }}
         .full-width {{ width: 100%; }}
         
-        .skin-list {{ margin: 20px 0; }}
-        .skin-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
-        .skin-info {{ display: flex; align-items: center; gap: 12px; }}
-        .skin-emoji {{ font-size: 40px; }}
-        .skin-name {{ font-size: 16px; font-weight: bold; }}
-        .skin-price {{ font-size: 12px; color: #ffd700; }}
-        .skin-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
+        .skin-list, .booster-list, .achievement-list {{ margin: 20px 0; }}
+        .skin-item, .booster-item, .achievement-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info, .booster-info, .achievement-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji, .booster-emoji, .achievement-emoji {{ font-size: 40px; }}
+        .skin-name, .booster-name, .achievement-name {{ font-size: 16px; font-weight: bold; }}
+        .skin-price, .booster-price, .achievement-desc {{ font-size: 12px; color: #ffd700; }}
+        .skin-btn, .booster-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
         .skin-btn.owned {{ background: #4caf50; }}
         .skin-btn.equipped {{ background: #ff9800; }}
+        .achievement-completed {{ background: #4caf50; color: white; border-radius: 12px; padding: 4px 8px; font-size: 12px; }}
+        
+        .case-container {{ text-align: center; margin: 20px 0; }}
+        .case-box {{ background: linear-gradient(135deg, #ffd700, #ff8c00); border-radius: 20px; padding: 30px; cursor: pointer; margin-bottom: 20px; }}
+        .case-box:active {{ transform: scale(0.98); }}
+        .case-emoji {{ font-size: 80px; }}
+        .case-price {{ color: white; margin-top: 10px; }}
         
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
@@ -351,284 +694,4 @@ async def mini_app(user_id: int = 1):
         <!-- ГЛАВНЫЙ ЭКРАН -->
         <div id="mainScreen" class="screen active">
             <div class="stats">
-                <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
-                <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
-                <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
-                <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
-            </div>
-            <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
-            <div class="button-grid">
-                <button class="action-btn" id="upgradeTapBtn">💪 Улучшить тап</button>
-                <button class="action-btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
-                <button class="action-btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
-                <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
-                <button class="action-btn" id="openShopBtn">👕 Магазин</button>
-                <button class="action-btn" id="openReferralBtn">👥 Рефералы</button>
-                <button class="action-btn" id="profileBtn">📊 Профиль</button>
-            </div>
-            <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
-        </div>
-        
-        <!-- МАГАЗИН -->
-        <div id="shopScreen" class="screen">
-            <h3 style="color: white; text-align: center; margin-bottom: 20px;">👕 МАГАЗИН СКИНОВ</h3>
-            <div id="skinsList" class="skin-list">Загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
-        </div>
-        
-        <!-- РЕФЕРАЛЫ -->
-        <div id="referralScreen" class="screen">
-            <h3 style="color: white; text-align: center; margin-bottom: 20px;">👥 РЕФЕРАЛЫ</h3>
-            <div class="stats" style="margin-bottom: 20px;">
-                <div class="stat-row"><span class="stat-label">👥 Приглашено друзей</span><span class="stat-value" id="referralCount">0</span></div>
-                <div class="stat-row"><span class="stat-label">🎁 Не получено наград</span><span class="stat-value" id="unclaimedRewards">0</span></div>
-            </div>
-            <div id="referralLinkBox" style="background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px;">
-                <div style="color: #aaa; font-size: 12px; margin-bottom: 8px;">🔗 Твоя реферальная ссылка:</div>
-                <div id="referralLink" style="color: #ffd700; font-size: 12px; word-break: break-all; font-family: monospace;"></div>
-                <button class="action-btn full-width" id="copyReferralBtn" style="margin-top: 10px; background: #4caf50;">📋 Копировать ссылку</button>
-            </div>
-            <button class="action-btn full-width" id="claimReferralBtn" style="margin-bottom: 10px;">🎁 Забрать награду</button>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
-        </div>
-    </div>
-
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        
-        const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let clicks = {stats["clicks"]};
-        let level = {stats["level"]};
-        let tapPower = {stats["tap_power"]};
-        let passiveIncome = {stats["passive_income"]};
-        let currentSkin = "{stats["skin"]}";
-        
-        function showScreen(screenName) {{
-            document.getElementById('mainScreen').classList.remove('active');
-            document.getElementById('shopScreen').classList.remove('active');
-            document.getElementById('referralScreen').classList.remove('active');
-            if (screenName === 'main') document.getElementById('mainScreen').classList.add('active');
-            if (screenName === 'shop') {{
-                document.getElementById('shopScreen').classList.add('active');
-                loadSkins();
-            }}
-            if (screenName === 'referrals') {{
-                document.getElementById('referralScreen').classList.add('active');
-                loadReferralData();
-            }}
-        }}
-        
-        function updateStats() {{
-            document.getElementById('clicksValue').textContent = clicks;
-            document.getElementById('levelValue').textContent = level;
-            document.getElementById('tapPowerValue').textContent = `+${{tapPower}}`;
-            document.getElementById('passiveValue').textContent = `${{passiveIncome}}/час`;
-        }}
-        
-        async function loadStats() {{
-            try {{
-                const res = await fetch(`/api/stats/${{userId}}`);
-                const data = await res.json();
-                clicks = data.clicks;
-                level = data.level;
-                tapPower = data.tap_power;
-                passiveIncome = data.passive_income;
-                currentSkin = data.skin;
-                updateStats();
-                document.getElementById('duck').textContent = currentSkin;
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function loadSkins() {{
-            try {{
-                const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
-                const data = await res.json();
-                const skinsList = document.getElementById('skinsList');
-                skinsList.innerHTML = '';
-                
-                for (const skin of data.skins) {{
-                    const div = document.createElement('div');
-                    div.className = 'skin-item';
-                    div.innerHTML = `
-                        <div class="skin-info">
-                            <span class="skin-emoji">${{skin.emoji}}</span>
-                            <div>
-                                <div class="skin-name">${{skin.name}}</div>
-                                <div class="skin-price">+${{skin.bonus}} к силе | ${{skin.price}} кликов</div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    const btn = document.createElement('button');
-                    if (skin.owned && skin.equipped) {{
-                        btn.textContent = '✅ ЭКИПИРОВАН';
-                        btn.className = 'skin-btn equipped';
-                        btn.disabled = true;
-                    }} else if (skin.owned) {{
-                        btn.textContent = '⚡ ЭКИПИРОВАТЬ';
-                        btn.className = 'skin-btn';
-                        btn.onclick = () => equipSkin(skin.id);
-                    }} else {{
-                        btn.textContent = `💎 КУПИТЬ (${{skin.price}})`;
-                        btn.className = 'skin-btn';
-                        btn.onclick = () => buySkin(skin.id);
-                    }}
-                    div.appendChild(btn);
-                    skinsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function loadReferralData() {{
-            try {{
-                const res = await fetch(`/api/get_referrals?user_id=${{userId}}`);
-                const data = await res.json();
-                document.getElementById('referralCount').textContent = data.count;
-                document.getElementById('unclaimedRewards').textContent = data.unclaimed;
-                
-                const botUsername = tg.initDataUnsafe?.user?.username || 'ZetaClickerRobot';
-                const referralLink = `https://t.me/${{botUsername}}?start=ref_${{userId}}`;
-                document.getElementById('referralLink').textContent = referralLink;
-                
-                document.getElementById('copyReferralBtn').onclick = () => {{
-                    navigator.clipboard.writeText(referralLink);
-                    tg.showPopup({{title: '✅ Скопировано!', message: 'Реферальная ссылка скопирована', buttons: [{{type: 'ok'}}]}});
-                }};
-                
-                document.getElementById('claimReferralBtn').onclick = async () => {{
-                    const claimRes = await fetch(`/api/claim_referral?user_id=${{userId}}`, {{method: 'POST'}});
-                    const claimData = await claimRes.json();
-                    if (claimData.success) {{
-                        tg.showPopup({{title: '🎉 Награда получена!', message: `+${{claimData.reward}} кликов!`, buttons: [{{type: 'ok'}}]}});
-                        await loadStats();
-                        await loadReferralData();
-                    }} else {{
-                        tg.showPopup({{title: '❌ Нет наград', message: claimData.message, buttons: [{{type: 'ok'}}]}});
-                    }}
-                }};
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function buySkin(skinId) {{
-            const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Покупка успешна!', message: `Вы купили ${{data.skin_name}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadSkins();
-            }} else {{
-                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function equipSkin(skinId) {{
-            const res = await fetch(`/api/equip_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Скин экипирован!', message: `Теперь ваша утка: ${{data.skin}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadSkins();
-            }} else {{
-                tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function sendClick(increment) {{
-            try {{
-                await fetch('/api/click', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ user_id: userId, clicks: increment }})
-                }});
-                await loadStats();
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        function showFloatingNumber(x, y, value) {{
-            const el = document.createElement('div');
-            el.className = 'tap-value';
-            el.textContent = `+${{value}}`;
-            el.style.left = `${{x}}px`;
-            el.style.top = `${{y}}px`;
-            document.body.appendChild(el);
-            setTimeout(() => el.remove(), 600);
-        }}
-        
-        document.getElementById('duck').onclick = async (e) => {{
-            const rect = e.target.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top;
-            showFloatingNumber(x, y, tapPower);
-            clicks += tapPower;
-            updateStats();
-            await sendClick(tapPower);
-        }};
-        
-        document.getElementById('upgradeTapBtn').onclick = async () => {{
-            const res = await fetch(`/api/upgrade_tap?user_id=${{userId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Улучшено!', message: `Сила клика: +${{data.new_tap_power}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
-            }}
-        }};
-        
-        document.getElementById('upgradePassiveBtn').onclick = async () => {{
-            const res = await fetch(`/api/upgrade_passive?user_id=${{userId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Пассивный доход улучшен!', message: `Теперь +${{data.new_passive}}/час`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
-            }}
-        }};
-        
-        document.getElementById('collectPassiveBtn').onclick = async () => {{
-            const res = await fetch(`/api/collect_passive?user_id=${{userId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '💰 Получено!', message: `+${{data.earned}} кликов!`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '😴 Нет дохода', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }};
-        
-        document.getElementById('dailyBtn').onclick = async () => {{
-            const res = await fetch(`/api/claim_daily?user_id=${{userId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '🎁 Бонус получен!', message: `+${{data.bonus}} кликов! Серия: ${{data.streak}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '❌ Уже забирал', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }};
-        
-        document.getElementById('openShopBtn').onclick = () => showScreen('shop');
-        document.getElementById('openReferralBtn').onclick = () => showScreen('referrals');
-        
-        document.getElementById('profileBtn').onclick = async () => {{
-            const res = await fetch(`/api/stats/${{userId}}`);
-            const data = await res.json();
-            tg.showPopup({{title: '📊 Профиль', message: `Клики: ${{data.clicks}}\\nУровень: ${{data.level}}\\nСила клика: +${{data.tap_power}}\\nПассивный доход: ${{data.passive_income}}/час`, buttons: [{{type: 'ok'}}]}});
-        }};
-        
-        document.getElementById('closeBtn').onclick = () => tg.close();
-        
-        loadStats();
-    </script>
-</body>
-</html>'''
-    
-    return HTMLResponse(content=html)
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+                <div class="stat-row"><span class="stat-label">🦆 Уровень</span><
