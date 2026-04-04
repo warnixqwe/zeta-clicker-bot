@@ -15,12 +15,11 @@ class ClickData(BaseModel):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
-# ==================== ИНИЦИАЛИЗАЦИЯ БД ====================
-
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
+    # Таблица пользователей (со всеми колонками, включая gems)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -39,6 +38,17 @@ def init_db():
         )
     """)
     
+    # Добавляем колонки, если их нет (для старых БД)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN gems INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN total_gems INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Остальные таблицы
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             referrer_id INTEGER,
@@ -136,32 +146,9 @@ def init_db():
         )
     """)
     
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tournaments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            description TEXT,
-            start_date TIMESTAMP,
-            end_date TIMESTAMP,
-            reward_gems INTEGER,
-            reward_clicks INTEGER,
-            reward_skin_id INTEGER DEFAULT NULL
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tournament_participants (
-            user_id INTEGER,
-            tournament_id INTEGER,
-            score INTEGER DEFAULT 0,
-            rank INTEGER DEFAULT NULL,
-            reward_claimed INTEGER DEFAULT 0,
-            PRIMARY KEY (user_id, tournament_id)
-        )
-    """)
-    
     conn.commit()
     
+    # Добавляем начальные данные
     cursor.execute("SELECT COUNT(*) FROM skins")
     if cursor.fetchone()[0] == 0:
         default_skins = [
@@ -243,9 +230,10 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Вызов инициализации БД при старте
 init_db()
 
-# ==================== ФУНКЦИИ ====================
+# ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С БД ====================
 
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
@@ -586,9 +574,6 @@ async def buy_skin(user_id: int, skin_id: int, payment: str = "clicks"):
     
     cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
     conn.commit()
-    
-    cursor.execute("SELECT COUNT(*) FROM user_skins WHERE user_id = ?", (user_id,))
-    skins_count = cursor.fetchone()[0]
     conn.close()
     
     return {"success": True, "skin_name": skin_name, "skin_emoji": skin_emoji}
@@ -789,7 +774,7 @@ async def handle_click(data: ClickData):
 async def health():
     return {"status": "ok"}
 
-# ==================== HTML ====================
+# ==================== HTML (упрощённая версия без турниров) ====================
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
@@ -836,11 +821,6 @@ async def mini_app(user_id: int = 1):
         .case-box:active {{ transform: scale(0.98); }}
         .case-emoji {{ font-size: 80px; }}
         .case-price {{ color: white; margin-top: 10px; font-weight: bold; }}
-        .tournament-card {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 15px; margin-bottom: 15px; }}
-        .tournament-name {{ font-size: 18px; font-weight: bold; color: #ffd700; margin-bottom: 10px; }}
-        .tournament-desc {{ font-size: 12px; color: #aaa; margin-bottom: 10px; }}
-        .leader-list {{ margin-top: 10px; padding-left: 15px; }}
-        .leader-item {{ display: flex; justify-content: space-between; font-size: 12px; margin: 5px 0; }}
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
         .energy-bar {{ width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin: 10px 0; overflow: hidden; }}
@@ -969,8 +949,8 @@ async def mini_app(user_id: int = 1):
             if (document.getElementById('profilePassive')) document.getElementById('profilePassive').textContent = passiveIncome + '/час';
             if (document.getElementById('profileSkin')) document.getElementById('profileSkin').textContent = currentSkin;
             if (document.getElementById('profileGems')) document.getElementById('profileGems').textContent = gems;
-            if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').textContent = document.getElementById('totalClicksSpan')?.textContent || '0';
-            if (document.getElementById('profileStreak')) document.getElementById('profileStreak').textContent = document.getElementById('streakSpan')?.textContent || '0';
+            if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').textContent = '{stats["total_clicks"]}';
+            if (document.getElementById('profileStreak')) document.getElementById('profileStreak').textContent = '{stats["daily_streak"]}';
         }}
         
         async function loadStats() {{
