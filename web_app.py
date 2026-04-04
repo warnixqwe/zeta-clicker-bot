@@ -49,9 +49,9 @@ def update_clicks(user_id: int, increment: int):
         conn.commit()
     conn.close()
 
-# HTML-шаблон прямо в коде (без Jinja2)
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+def generate_html(clicks: int, level: int, tap_power: int, skin: str) -> str:
+    """Генерирует HTML-страницу с подставленными значениями"""
+    return f'''<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -59,14 +59,14 @@ HTML_TEMPLATE = """
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
+        * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-        }
-        body {
+        }}
+        body {{
             min-height: 100vh;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -74,39 +74,39 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: center;
             align-items: center;
-        }
-        .container {
+        }}
+        .container {{
             max-width: 500px;
             width: 100%;
             background: rgba(255,255,255,0.05);
             border-radius: 32px;
             backdrop-filter: blur(10px);
             padding: 20px;
-        }
-        .stats {
+        }}
+        .stats {{
             background: rgba(0,0,0,0.3);
             border-radius: 24px;
             padding: 16px;
             margin-bottom: 24px;
-        }
-        .stat-row {
+        }}
+        .stat-row {{
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
             border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .stat-row:last-child { border-bottom: none; }
-        .stat-label { color: #aaa; font-size: 14px; }
-        .stat-value { color: #ffd700; font-size: 20px; font-weight: bold; }
-        .duck-container { display: flex; justify-content: center; margin: 20px 0; }
-        .duck { font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }
-        .duck:active { transform: scale(0.94); }
-        .energy-section { margin: 20px 0; }
-        .energy-label { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 6px; }
-        .energy-bar-bg { background: rgba(255,255,255,0.15); border-radius: 12px; height: 12px; overflow: hidden; }
-        .energy-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00c6ff, #0072ff); border-radius: 12px; transition: width 0.2s; }
-        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }
-        .action-btn {
+        }}
+        .stat-row:last-child {{ border-bottom: none; }}
+        .stat-label {{ color: #aaa; font-size: 14px; }}
+        .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
+        .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
+        .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
+        .duck:active {{ transform: scale(0.94); }}
+        .energy-section {{ margin: 20px 0; }}
+        .energy-label {{ display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 6px; }}
+        .energy-bar-bg {{ background: rgba(255,255,255,0.15); border-radius: 12px; height: 12px; overflow: hidden; }}
+        .energy-fill {{ width: 100%; height: 100%; background: linear-gradient(90deg, #00c6ff, #0072ff); border-radius: 12px; transition: width 0.2s; }}
+        .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
+        .action-btn {{
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             border-radius: 16px;
@@ -116,10 +116,10 @@ HTML_TEMPLATE = """
             font-weight: 600;
             cursor: pointer;
             text-align: center;
-        }
-        .action-btn:active { transform: scale(0.96); opacity: 0.9; }
-        .full-width { width: 100%; background: rgba(255,255,255,0.1); }
-        .tap-value {
+        }}
+        .action-btn:active {{ transform: scale(0.96); opacity: 0.9; }}
+        .full-width {{ width: 100%; background: rgba(255,255,255,0.1); }}
+        .tap-value {{
             position: fixed;
             pointer-events: none;
             font-size: 28px;
@@ -127,11 +127,11 @@ HTML_TEMPLATE = """
             color: #ffd700;
             animation: floatUp 0.6s ease-out forwards;
             z-index: 1000;
-        }
-        @keyframes floatUp {
-            0% { opacity: 1; transform: translateY(0) scale(0.8); }
-            100% { opacity: 0; transform: translateY(-80px) scale(1.2); }
-        }
+        }}
+        @keyframes floatUp {{
+            0% {{ opacity: 1; transform: translateY(0) scale(0.8); }}
+            100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }}
+        }}
     </style>
 </head>
 <body>
@@ -178,57 +178,57 @@ HTML_TEMPLATE = """
         const energyFill = document.getElementById('energyFill');
         const energyText = document.getElementById('energyText');
         
-        function updateUI() {
+        function updateUI() {{
             clicksSpan.textContent = clicks;
             levelSpan.textContent = level;
-            tapPowerSpan.textContent = `+${tapPower}`;
-            energyFill.style.width = `${(energy / maxEnergy) * 100}%`;
-            energyText.textContent = `${Math.floor(energy)}/${maxEnergy}`;
-        }
+            tapPowerSpan.textContent = `+${{tapPower}}`;
+            energyFill.style.width = `${{(energy / maxEnergy) * 100}}%`;
+            energyText.textContent = `${{Math.floor(energy)}}/${{maxEnergy}}`;
+        }}
         
-        function showFloatingNumber(x, y, value) {
+        function showFloatingNumber(x, y, value) {{
             const el = document.createElement('div');
             el.className = 'tap-value';
-            el.textContent = `+${value}`;
-            el.style.left = `${x}px`;
-            el.style.top = `${y}px`;
+            el.textContent = `+${{value}}`;
+            el.style.left = `${{x}}px`;
+            el.style.top = `${{y}}px`;
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 600);
-        }
+        }}
         
-        async function sendClick(increment) {
-            try {
-                const response = await fetch('/api/click', {
+        async function sendClick(increment) {{
+            try {{
+                const response = await fetch('/api/click', {{
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, clicks: increment })
-                });
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ user_id: userId, clicks: increment }})
+                }});
                 const data = await response.json();
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch(e) { console.error('Click error:', e); }
-        }
+            }} catch(e) {{ console.error('Click error:', e); }}
+        }}
         
-        function startEnergyRegen() {
+        function startEnergyRegen() {{
             if (regenInterval) clearInterval(regenInterval);
-            regenInterval = setInterval(() => {
-                if (energy < maxEnergy) {
+            regenInterval = setInterval(() => {{
+                if (energy < maxEnergy) {{
                     energy = Math.min(energy + 5, maxEnergy);
                     updateUI();
-                } else if (energy >= maxEnergy && regenInterval) {
+                }} else if (energy >= maxEnergy && regenInterval) {{
                     clearInterval(regenInterval);
                     regenInterval = null;
-                }
-            }, 1000);
-        }
+                }}
+            }}, 1000);
+        }}
         
-        duck.addEventListener('click', async (e) => {
-            if (energy <= 0) {
-                tg.showPopup({ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{type: 'ok'}] });
+        duck.addEventListener('click', async (e) => {{
+            if (energy <= 0) {{
+                tg.showPopup({{ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{{type: 'ok'}}] }});
                 return;
-            }
+            }}
             const rect = duck.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top;
@@ -237,42 +237,39 @@ HTML_TEMPLATE = """
             updateUI();
             await sendClick(tapPower);
             if (energy < maxEnergy) startEnergyRegen();
-        });
+        }});
         
-        async function loadStats() {
-            try {
-                const response = await fetch(`/api/stats/${userId}`);
+        async function loadStats() {{
+            try {{
+                const response = await fetch(`/api/stats/${{userId}}`);
                 const data = await response.json();
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch(e) { console.error('Load error:', e); }
-        }
+            }} catch(e) {{ console.error('Load error:', e); }}
+        }}
         
-        document.getElementById('profileBtn').onclick = () => tg.showPopup({title: 'Профиль', message: `Клики: ${clicks}\\nУровень: ${level}\\nСила: +${tapPower}`, buttons: [{type: 'ok'}]});
-        document.getElementById('shopBtn').onclick = () => tg.showPopup({title: 'Магазин', message: 'Скоро тут будут скины!', buttons: [{type: 'ok'}]});
-        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({title: 'Прокачка', message: 'Улучшай силу клика!', buttons: [{type: 'ok'}]});
-        document.getElementById('questsBtn').onclick = () => tg.showPopup({title: 'Задания', message: 'Ежедневные задания', buttons: [{type: 'ok'}]});
-        document.getElementById('leaderboardBtn').onclick = () => tg.showPopup({title: 'Топ игроков', message: 'Скоро появится', buttons: [{type: 'ok'}]});
-        document.getElementById('friendsBtn').onclick = () => tg.showPopup({title: 'Друзья', message: 'Реферальная система', buttons: [{type: 'ok'}]});
-        document.getElementById('passiveBtn').onclick = () => tg.showPopup({title: 'Пассивный доход', message: 'Доход будет начисляться', buttons: [{type: 'ok'}]});
-        document.getElementById('dailyBtn').onclick = () => tg.showPopup({title: 'Ежедневный бонус', message: 'Заходи каждый день!', buttons: [{type: 'ok'}]});
+        document.getElementById('profileBtn').onclick = () => tg.showPopup({{title: 'Профиль', message: `Клики: ${{clicks}}\\nУровень: ${{level}}\\nСила: +${{tapPower}}`, buttons: [{{type: 'ok'}}]}});
+        document.getElementById('shopBtn').onclick = () => tg.showPopup({{title: 'Магазин', message: 'Скоро тут будут скины!', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({{title: 'Прокачка', message: 'Улучшай силу клика!', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('questsBtn').onclick = () => tg.showPopup({{title: 'Задания', message: 'Ежедневные задания', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('leaderboardBtn').onclick = () => tg.showPopup({{title: 'Топ игроков', message: 'Скоро появится', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('friendsBtn').onclick = () => tg.showPopup({{title: 'Друзья', message: 'Реферальная система', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('passiveBtn').onclick = () => tg.showPopup({{title: 'Пассивный доход', message: 'Доход будет начисляться', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('dailyBtn').onclick = () => tg.showPopup({{title: 'Ежедневный бонус', message: 'Заходи каждый день!', buttons: [{{type: 'ok'}}]}});
         document.getElementById('closeBtn').onclick = () => tg.close();
         
         loadStats();
         startEnergyRegen();
     </script>
 </body>
-</html>
-"""
+</html>'''
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = get_user_stats(user_id)
-    
-    # Подставляем данные в HTML
-    html = HTML_TEMPLATE.format(
+    html = generate_html(
         clicks=stats["clicks"],
         level=stats["level"],
         tap_power=stats["tap_power"],
