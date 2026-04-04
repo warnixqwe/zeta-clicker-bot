@@ -789,20 +789,6 @@ async def mini_app(user_id: int = 1):
     </style>
 </head>
 <body>
-<script>
-    // Фолбэк для Telegram Desktop
-    if (typeof window.Telegram === 'undefined') {
-        window.Telegram = {
-            WebApp: {
-                ready: () => {},
-                expand: () => {},
-                close: () => {},
-                showPopup: (data) => { alert(data.message); },
-                initDataUnsafe: { user: { username: 'ZetaClickerRobot' } }
-            }
-        };
-    }
-</script>
     <div class="container">
         <div id="mainScreen" class="screen active">
             <div class="stats">
