@@ -301,6 +301,66 @@ async def get_stats(user_id: int):
 async def health():
     return {"status": "ok"}
 
+# ==================== API ДЛЯ КНОПОК ====================
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT clicks, tap_power FROM users WHERE user_id = ?", (user_id,))
+    clicks, tap_power = cursor.fetchone()
+    price = tap_power * 100
+    if clicks >= price:
+        new_tap_power = tap_power + 1
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_tap_power": new_tap_power}
+    conn.close()
+    return {"success": False, "need": price}
+
+@app.post("/api/buy_skin")
+async def buy_skin(user_id: int, skin_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT price_clicks FROM skins WHERE id = ?", (skin_id,))
+    price = cursor.fetchone()[0]
+    cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+    clicks = cursor.fetchone()[0]
+    if clicks >= price:
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        cursor.execute("INSERT INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
+        conn.commit()
+        conn.close()
+        return {"success": True}
+    conn.close()
+    return {"success": False, "need": price}
+
+@app.post("/api/claim_daily")
+async def claim_daily(user_id: int):
+    from datetime import datetime, timedelta
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT last_daily, daily_streak, clicks FROM users WHERE user_id = ?", (user_id,))
+    last_daily, daily_streak, clicks = cursor.fetchone()
+    today = datetime.now().date()
+    last_date = datetime.fromisoformat(last_daily).date() if last_daily else None
+    if last_date == today:
+        conn.close()
+        return {"success": False, "message": "Уже забирал сегодня"}
+    if last_date == today - timedelta(days=1):
+        daily_streak += 1
+    else:
+        daily_streak = 1
+    bonus = min(100 + daily_streak * 50, 600)
+    new_clicks = clicks + bonus
+    cursor.execute("UPDATE users SET clicks = ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", (new_clicks, today.isoformat(), daily_streak, user_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "bonus": bonus, "streak": daily_streak}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
