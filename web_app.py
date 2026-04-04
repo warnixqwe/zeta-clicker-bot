@@ -13,8 +13,6 @@ class ClickData(BaseModel):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
-# ==================== БАЗОВЫЕ ФУНКЦИИ ====================
-
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -56,7 +54,7 @@ def update_clicks(user_id: int, increment: int):
         conn.commit()
     conn.close()
 
-# ==================== API ДЛЯ КНОПОК ====================
+# ==================== API ====================
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
@@ -163,11 +161,15 @@ async def claim_daily(user_id: int):
 
 @app.post("/api/buy_skin")
 async def buy_skin(user_id: int, skin_id: int):
-    skins = {2: 5000, 3: 15000, 4: 30000, 5: 50000}  # id: price
+    skins = {2: {"price": 5000, "emoji": "🌟", "name": "Золотая утка", "bonus": 2},
+             3: {"price": 15000, "emoji": "🤖", "name": "Киберутка", "bonus": 5},
+             4: {"price": 30000, "emoji": "👻", "name": "Утка-призрак", "bonus": 10},
+             5: {"price": 50000, "emoji": "😈", "name": "Дьявольская утка", "bonus": 15}}
+    
     if skin_id not in skins:
         return {"success": False, "message": "Скин не найден"}
     
-    price = skins[skin_id]
+    price = skins[skin_id]["price"]
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -185,15 +187,15 @@ async def buy_skin(user_id: int, skin_id: int):
         cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
         conn.commit()
         conn.close()
-        return {"success": True, "new_clicks": new_clicks}
+        return {"success": True, "new_clicks": new_clicks, "skin_name": skins[skin_id]["name"]}
     else:
         conn.close()
         return {"success": False, "need": price, "clicks": clicks}
 
 @app.post("/api/equip_skin")
 async def equip_skin(user_id: int, skin_id: int):
-    skins_emoji = {2: "🌟", 3: "🤖", 4: "👻", 5: "😈"}
-    if skin_id not in skins_emoji:
+    skins = {2: "🌟", 3: "🤖", 4: "👻", 5: "😈"}
+    if skin_id not in skins:
         return {"success": False, "message": "Скин не найден"}
     
     conn = sqlite3.connect(DB_PATH)
@@ -203,7 +205,7 @@ async def equip_skin(user_id: int, skin_id: int):
         conn.close()
         return {"success": False, "message": "Скин не куплен"}
     
-    emoji = skins_emoji[skin_id]
+    emoji = skins[skin_id]
     cursor.execute("UPDATE users SET current_skin = ? WHERE user_id = ?", (emoji, user_id))
     conn.commit()
     conn.close()
@@ -216,6 +218,8 @@ async def get_skins(user_id: int):
     cursor = conn.cursor()
     cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
     owned = [row[0] for row in cursor.fetchall()]
+    cursor.execute("SELECT current_skin FROM users WHERE user_id = ?", (user_id,))
+    current = cursor.fetchone()[0]
     conn.close()
     
     all_skins = [
@@ -227,8 +231,9 @@ async def get_skins(user_id: int):
     
     for skin in all_skins:
         skin["owned"] = skin["id"] in owned
+        skin["equipped"] = (skin["emoji"] == current)
     
-    return {"skins": all_skins}
+    return {"skins": all_skins, "current_skin": current}
 
 @app.get("/api/get_referrals")
 async def get_referrals(user_id: int):
@@ -242,7 +247,34 @@ async def get_referrals(user_id: int):
     
     return {"count": count, "unclaimed": unclaimed}
 
-# ==================== ОСНОВНЫЕ РОУТЫ ====================
+@app.get("/api/stats/{user_id}")
+async def get_stats(user_id: int):
+    stats = get_user_stats(user_id)
+    return JSONResponse(content={
+        "clicks": stats["clicks"],
+        "level": stats["level"],
+        "tap_power": stats["tap_power"],
+        "passive_income": stats["passive_income"],
+        "skin": stats["skin"],
+        "daily_streak": stats["daily_streak"]
+    })
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    update_clicks(data.user_id, data.clicks)
+    stats = get_user_stats(data.user_id)
+    return JSONResponse(content={
+        "clicks": stats["clicks"],
+        "level": stats["level"],
+        "tap_power": stats["tap_power"],
+        "passive_income": stats["passive_income"]
+    })
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+# ==================== HTML С МНОГОЭКРАННЫМ МЕНЮ ====================
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
@@ -259,42 +291,76 @@ async def mini_app(user_id: int = 1):
         * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
         body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
         .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; backdrop-filter: blur(10px); padding: 20px; }}
+        
+        /* Экраны */
+        .screen {{ display: none; }}
+        .screen.active {{ display: block; }}
+        
+        /* Статистика */
         .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
+        
+        /* Утка */
         .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
         .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
         .duck:active {{ transform: scale(0.94); }}
+        
+        /* Кнопки */
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
         .action-btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
         .action-btn:active {{ transform: scale(0.96); opacity: 0.9; }}
-        .full-width {{ width: 100%; background: rgba(255,255,255,0.1); }}
+        .back-btn {{ background: rgba(255,255,255,0.1); margin-top: 20px; }}
+        .full-width {{ width: 100%; }}
+        
+        /* Список скинов */
+        .skin-list {{ margin: 20px 0; }}
+        .skin-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji {{ font-size: 40px; }}
+        .skin-name {{ font-size: 16px; font-weight: bold; }}
+        .skin-price {{ font-size: 12px; color: #ffd700; }}
+        .skin-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
+        .skin-btn.owned {{ background: #4caf50; }}
+        .skin-btn.equipped {{ background: #ff9800; }}
+        
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="stats">
-            <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
-            <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
-            <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
-            <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
+        <!-- ЭКРАН 1: ГЛАВНЫЙ -->
+        <div id="mainScreen" class="screen active">
+            <div class="stats">
+                <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
+                <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
+            </div>
+            <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
+            <div class="button-grid">
+                <button class="action-btn" id="upgradeTapBtn">💪 Улучшить тап</button>
+                <button class="action-btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
+                <button class="action-btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
+                <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
+                <button class="action-btn" id="openShopBtn">👕 Магазин</button>
+                <button class="action-btn" id="referralBtn">👥 Рефералы</button>
+                <button class="action-btn" id="profileBtn">📊 Профиль</button>
+            </div>
+            <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
         </div>
-        <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
-        <div class="button-grid">
-            <button class="action-btn" id="upgradeTapBtn">💪 Улучшить тап</button>
-            <button class="action-btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
-            <button class="action-btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
-            <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
-            <button class="action-btn" id="shopBtn">👕 Магазин</button>
-            <button class="action-btn" id="referralBtn">👥 Рефералы</button>
-            <button class="action-btn" id="profileBtn">📊 Профиль</button>
+        
+        <!-- ЭКРАН 2: МАГАЗИН -->
+        <div id="shopScreen" class="screen">
+            <h3 style="color: white; text-align: center; margin-bottom: 20px;">👕 МАГАЗИН СКИНОВ</h3>
+            <div id="skinsList" class="skin-list">Загрузка...</div>
+            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
         </div>
-        <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
     </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
@@ -305,6 +371,17 @@ async def mini_app(user_id: int = 1):
         let level = {stats["level"]};
         let tapPower = {stats["tap_power"]};
         let passiveIncome = {stats["passive_income"]};
+        let currentSkin = "{stats["skin"]}";
+        
+        function showScreen(screenName) {{
+            document.getElementById('mainScreen').classList.remove('active');
+            document.getElementById('shopScreen').classList.remove('active');
+            if (screenName === 'main') document.getElementById('mainScreen').classList.add('active');
+            if (screenName === 'shop') {{
+                document.getElementById('shopScreen').classList.add('active');
+                loadSkins();
+            }}
+        }}
         
         function updateStats() {{
             document.getElementById('clicksValue').textContent = clicks;
@@ -321,8 +398,74 @@ async def mini_app(user_id: int = 1):
                 level = data.level;
                 tapPower = data.tap_power;
                 passiveIncome = data.passive_income;
+                currentSkin = data.skin;
                 updateStats();
+                document.getElementById('duck').textContent = currentSkin;
             }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function loadSkins() {{
+            try {{
+                const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
+                const data = await res.json();
+                const skinsList = document.getElementById('skinsList');
+                skinsList.innerHTML = '';
+                
+                for (const skin of data.skins) {{
+                    const div = document.createElement('div');
+                    div.className = 'skin-item';
+                    div.innerHTML = `
+                        <div class="skin-info">
+                            <span class="skin-emoji">${{skin.emoji}}</span>
+                            <div>
+                                <div class="skin-name">${{skin.name}}</div>
+                                <div class="skin-price">+${{skin.bonus}} к силе | ${'{:.0f}'.format(skin.price)} кликов</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const btn = document.createElement('button');
+                    if (skin.owned && skin.equipped) {{
+                        btn.textContent = '✅ ЭКИПИРОВАН';
+                        btn.className = 'skin-btn equipped';
+                        btn.disabled = true;
+                    }} else if (skin.owned) {{
+                        btn.textContent = '⚡ ЭКИПИРОВАТЬ';
+                        btn.className = 'skin-btn';
+                        btn.onclick = () => equipSkin(skin.id);
+                    }} else {{
+                        btn.textContent = `💎 КУПИТЬ (${'{:.0f}'.format(skin.price)})`;
+                        btn.className = 'skin-btn';
+                        btn.onclick = () => buySkin(skin.id);
+                    }}
+                    div.appendChild(btn);
+                    skinsList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function buySkin(skinId) {{
+            const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Покупка успешна!', message: `Вы купили ${{data.skin_name}}`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+                await loadSkins();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
+            }}
+        }}
+        
+        async function equipSkin(skinId) {{
+            const res = await fetch(`/api/equip_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Скин экипирован!', message: `Теперь ваша утка: ${{data.skin}}`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+                await loadSkins();
+            }} else {{
+                tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
+            }}
         }}
         
         async function sendClick(increment) {{
@@ -336,7 +479,22 @@ async def mini_app(user_id: int = 1):
             }} catch(e) {{ console.error(e); }}
         }}
         
-        document.getElementById('duck').onclick = async () => {{
+        function showFloatingNumber(x, y, value) {{
+            const el = document.createElement('div');
+            el.className = 'tap-value';
+            el.textContent = `+${{value}}`;
+            el.style.left = `${{x}}px`;
+            el.style.top = `${{y}}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 600);
+        }}
+        
+        // Обработчики кнопок
+        document.getElementById('duck').onclick = async (e) => {{
+            const rect = e.target.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top;
+            showFloatingNumber(x, y, tapPower);
             clicks += tapPower;
             updateStats();
             await sendClick(tapPower);
@@ -386,17 +544,7 @@ async def mini_app(user_id: int = 1):
             }}
         }};
         
-        document.getElementById('shopBtn').onclick = async () => {{
-            const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
-            const data = await res.json();
-            let msg = "👕 МАГАЗИН СКИНОВ:\\n\\n";
-            for (const skin of data.skins) {{
-                msg += `${{skin.emoji}} ${{skin.name}} — ${{skin.price}} кликов`;
-                if (skin.owned) msg += " ✅ КУПЛЕН";
-                msg += "\\n";
-            }}
-            tg.showPopup({{title: 'Магазин', message: msg, buttons: [{{type: 'ok'}}]}});
-        }};
+        document.getElementById('openShopBtn').onclick = () => showScreen('shop');
         
         document.getElementById('referralBtn').onclick = async () => {{
             const res = await fetch(`/api/get_referrals?user_id=${{userId}}`);
@@ -418,33 +566,6 @@ async def mini_app(user_id: int = 1):
 </html>'''
     
     return HTMLResponse(content=html)
-
-@app.post("/api/click")
-async def handle_click(data: ClickData):
-    update_clicks(data.user_id, data.clicks)
-    stats = get_user_stats(data.user_id)
-    return JSONResponse(content={
-        "clicks": stats["clicks"],
-        "level": stats["level"],
-        "tap_power": stats["tap_power"],
-        "passive_income": stats["passive_income"]
-    })
-
-@app.get("/api/stats/{user_id}")
-async def get_stats(user_id: int):
-    stats = get_user_stats(user_id)
-    return JSONResponse(content={
-        "clicks": stats["clicks"],
-        "level": stats["level"],
-        "tap_power": stats["tap_power"],
-        "passive_income": stats["passive_income"],
-        "skin": stats["skin"],
-        "daily_streak": stats["daily_streak"]
-    })
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
 
 if __name__ == "__main__":
     import uvicorn
