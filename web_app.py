@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import random
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -134,12 +135,41 @@ def init_db():
             (case_id, "booster", 1, "x2 клика (30 мин)", 5),
             (case_id, "skin", 2, "Золотая утка 🌟", 2),
         ])
+        
+        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Серебряный кейс", "🥈", 5000))
+        case_id = cursor.lastrowid
+        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
+            (case_id, "clicks", 1000, "1000 кликов", 25),
+            (case_id, "clicks", 2500, "2500 кликов", 20),
+            (case_id, "clicks", 5000, "5000 кликов", 15),
+            (case_id, "gems", 2, "2 алмаза 💎", 15),
+            (case_id, "gems", 5, "5 алмазов 💎", 10),
+            (case_id, "booster", 1, "x2 клика (30 мин)", 8),
+            (case_id, "skin", 3, "Киберутка 🤖", 5),
+            (case_id, "skin", 4, "Утка-призрак 👻", 2),
+        ])
+        
+        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Алмазный кейс", "💎", 15000))
+        case_id = cursor.lastrowid
+        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
+            (case_id, "clicks", 5000, "5000 кликов", 20),
+            (case_id, "clicks", 10000, "10000 кликов", 15),
+            (case_id, "clicks", 25000, "25000 кликов", 10),
+            (case_id, "gems", 5, "5 алмазов 💎", 15),
+            (case_id, "gems", 10, "10 алмазов 💎", 10),
+            (case_id, "gems", 25, "25 алмазов 💎", 5),
+            (case_id, "booster", 2, "x2 клика (1 час)", 10),
+            (case_id, "booster", 3, "Автокликер (15 мин)", 8),
+            (case_id, "skin", 4, "Утка-призрак 👻", 4),
+            (case_id, "skin", 5, "Дьявольская утка 😈", 3),
+        ])
     
     cursor.execute("SELECT COUNT(*) FROM boosters")
     if cursor.fetchone()[0] == 0:
         cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
             ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
             ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
+            ("Автокликер", "🤖", "Автоматически кликает 10 раз в секунду (15 минут)", "auto_click", 10, 15, 8000),
         ])
     
     cursor.execute("SELECT COUNT(*) FROM achievements")
@@ -150,6 +180,8 @@ def init_db():
             ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000),
             ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500),
             ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000),
+            ("Везунчик", "Открыть 5 кейсов", "cases", 5, 3, 3000),
+            ("Азартный", "Открыть 20 кейсов", "cases", 20, 10, 10000),
         ])
     conn.commit()
     conn.close()
@@ -400,13 +432,16 @@ async def open_case(user_id: int, case_id: int = 1):
         elif reward_type == "gems":
             cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (reward_value, user_id))
         elif reward_type == "booster":
-            expires_at = datetime.now() + timedelta(minutes=30)
+            expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60 if reward_value == 2 else 15)
             cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
                            (user_id, reward_value, expires_at.isoformat()))
         elif reward_type == "skin":
             cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
+        cursor.execute("SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id IN (6,7) AND completed = 1", (user_id,))
+        cases_opened = cursor.fetchone()[0]
         conn.commit()
         conn.close()
+        check_achievements(user_id, "cases", cases_opened + 1)
         return {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
     conn.close()
     return {"success": False, "need": price}
@@ -701,7 +736,39 @@ async def mini_app(user_id: int = 1):
                 <button class="btn" id="openBoostersBtn">⚡ Бустеры</button>
                 <button class="btn" id="openAchievementsBtn">🏆 Достижения</button>
                 <button class="btn" id="openLeaderboardBtn">🏆 Топ</button>
+                <button class="btn" id="profileBtn">📊 Профиль</button>
+                <button class="btn" id="donateBtn">💰 Донат</button>
             </div>
+        </div>
+        
+        <div id="profileScreen" class="screen">
+            <h3>📊 ПРОФИЛЬ</h3>
+            <div class="stats">
+                <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="profileLevel">{stats["level"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💰 Всего кликов</span><span class="stat-value" id="profileTotalClicks">{stats["total_clicks"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="profileTapPower">+{stats["tap_power"]}</span></div>
+                <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="profilePassive">{stats["passive_income"]}/час</span></div>
+                <div class="stat-row"><span class="stat-label">💎 Алмазы</span><span class="stat-value" id="profileGems">{stats["gems"]}</span></div>
+                <div class="stat-row"><span class="stat-label">📅 Серия входов</span><span class="stat-value" id="profileStreak">{stats["daily_streak"]}</span></div>
+                <div class="stat-row"><span class="stat-label">🎨 Скин</span><span class="stat-value" id="profileSkin">{stats["skin"]}</span></div>
+            </div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
+        
+        <div id="donateScreen" class="screen">
+            <h3>💰 ПОДДЕРЖАТЬ ПРОЕКТ</h3>
+            <div class="stats">
+                <div class="stat-row"><span class="stat-label">⭐ Telegram Stars</span><span class="stat-value">100 Stars = 1000 кликов + 1💎</span></div>
+                <div class="stat-row"><span class="stat-label">⭐ Telegram Stars</span><span class="stat-value">500 Stars = 6000 кликов + 5💎</span></div>
+                <div class="stat-row"><span class="stat-label">⭐ Telegram Stars</span><span class="stat-value">1000 Stars = 15000 кликов + 15💎</span></div>
+            </div>
+            <div style="background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px;">
+                <div style="color: #aaa; font-size: 12px; margin-bottom: 8px;">🔗 Отправь донат через команду:</div>
+                <div style="color: #ffd700; font-size: 14px; word-break: break-all; font-family: monospace;">/donate 100</div>
+                <div style="color: #ffd700; font-size: 14px; word-break: break-all; font-family: monospace;">/donate 500</div>
+                <div style="color: #ffd700; font-size: 14px; word-break: break-all; font-family: monospace;">/donate 1000</div>
+            </div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
         <div id="shopScreen" class="screen">
@@ -758,7 +825,7 @@ async def mini_app(user_id: int = 1):
         let currentSkin = "{stats["skin"]}";
         
         function showScreen(screenName) {{
-            const screens = ['mainScreen', 'shopScreen', 'casesScreen', 'boostersScreen', 'achievementsScreen', 'leaderboardScreen'];
+            const screens = ['mainScreen', 'profileScreen', 'donateScreen', 'shopScreen', 'casesScreen', 'boostersScreen', 'achievementsScreen', 'leaderboardScreen'];
             screens.forEach(s => document.getElementById(s).classList.remove('active'));
             document.getElementById(screenName).classList.add('active');
             if (screenName === 'shopScreen') loadSkins();
@@ -766,6 +833,7 @@ async def mini_app(user_id: int = 1):
             if (screenName === 'boostersScreen') loadBoosters();
             if (screenName === 'achievementsScreen') loadAchievements();
             if (screenName === 'leaderboardScreen') loadLeaderboard();
+            if (screenName === 'profileScreen') loadProfile();
         }}
         
         function updateUI() {{
@@ -776,6 +844,20 @@ async def mini_app(user_id: int = 1):
             document.getElementById('gemsValue').innerText = gems;
             document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
+        }}
+        
+        async function loadProfile() {{
+            try {{
+                const res = await fetch('/api/get_stats?user_id=' + userId);
+                const data = await res.json();
+                document.getElementById('profileLevel').innerText = data.level;
+                document.getElementById('profileTotalClicks').innerText = data.total_clicks;
+                document.getElementById('profileTapPower').innerText = '+' + data.tap_power;
+                document.getElementById('profilePassive').innerText = data.passive_income + '/час';
+                document.getElementById('profileGems').innerText = data.gems;
+                document.getElementById('profileStreak').innerText = data.daily_streak;
+                document.getElementById('profileSkin').innerText = data.skin;
+            }} catch(e) {{ console.error(e); }}
         }}
         
         async function loadStats() {{
@@ -1067,13 +1149,15 @@ async def mini_app(user_id: int = 1):
         document.getElementById('openBoostersBtn').onclick = () => showScreen('boostersScreen');
         document.getElementById('openAchievementsBtn').onclick = () => showScreen('achievementsScreen');
         document.getElementById('openLeaderboardBtn').onclick = () => showScreen('leaderboardScreen');
+        document.getElementById('profileBtn').onclick = () => showScreen('profileScreen');
+        document.getElementById('donateBtn').onclick = () => showScreen('donateScreen');
         
         setInterval(() => {{
             if (energy < maxEnergy) {{
                 energy = Math.min(energy + 1, maxEnergy);
                 updateUI();
             }}
-        }}, 1000);
+        }}, 2000);
         
         loadStats();
     </script>
