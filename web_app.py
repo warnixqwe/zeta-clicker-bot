@@ -1172,14 +1172,13 @@ async def mini_app(user_id: int = 1):
                 
                 const div = document.createElement('div');
                 div.className = 'tournament-card';
-                div.innerHTML = `
-                    <div class="tournament-name">🎯 ${t.name}</div>
-                    <div class="tournament-desc">${t.description}</div>
-                    <div class="tournament-desc">📅 До: ${endDate}</div>
-                    <div class="tournament-desc">🎁 Награда: +${t.reward_gems}💎 +${t.reward_clicks}💰</div>
-                    <div class="tournament-desc">📊 Твой счёт: ${t.my_score} кликов</div>
-                    ${leadersHtml}
-                `;
+                div.innerHTML = 
+                    '<div class="tournament-name">🎯 ' + t.name + '</div>' +
+                    '<div class="tournament-desc">' + t.description + '</div>' +
+                    '<div class="tournament-desc">📅 До: ' + endDate + '</div>' +
+                    '<div class="tournament-desc">🎁 Награда: +' + t.reward_gems + '💎 +' + t.reward_clicks + '💰</div>' +
+                    '<div class="tournament-desc">📊 Твой счёт: ' + t.my_score + ' кликов</div>' +
+                    leadersHtml;
                 tournamentsList.appendChild(div);
             }}
         }}
