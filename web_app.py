@@ -247,6 +247,27 @@ async def get_referrals(user_id: int):
     
     return {"count": count, "unclaimed": unclaimed}
 
+@app.post("/api/claim_referral")
+async def claim_referral(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND reward_claimed = 0", (user_id,))
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        conn.close()
+        return {"success": False, "message": "Нет неполученных наград"}
+    
+    reward = count * 1000
+    cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+    clicks = cursor.fetchone()[0]
+    cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (clicks + reward, user_id))
+    cursor.execute("UPDATE referrals SET reward_claimed = 1 WHERE referrer_id = ? AND reward_claimed = 0", (user_id,))
+    conn.commit()
+    conn.close()
+    
+    return {"success": True, "reward": reward}
+
 @app.get("/api/stats/{user_id}")
 async def get_stats(user_id: int):
     stats = get_user_stats(user_id)
@@ -274,7 +295,7 @@ async def handle_click(data: ClickData):
 async def health():
     return {"status": "ok"}
 
-# ==================== HTML С МНОГОЭКРАННЫМ МЕНЮ ====================
+# ==================== HTML С ТРЕМЯ ЭКРАНАМИ ====================
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
@@ -292,30 +313,25 @@ async def mini_app(user_id: int = 1):
         body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
         .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; backdrop-filter: blur(10px); padding: 20px; }}
         
-        /* Экраны */
         .screen {{ display: none; }}
         .screen.active {{ display: block; }}
         
-        /* Статистика */
         .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
         
-        /* Утка */
         .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
         .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
         .duck:active {{ transform: scale(0.94); }}
         
-        /* Кнопки */
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
         .action-btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
         .action-btn:active {{ transform: scale(0.96); opacity: 0.9; }}
         .back-btn {{ background: rgba(255,255,255,0.1); margin-top: 20px; }}
         .full-width {{ width: 100%; }}
         
-        /* Список скинов */
         .skin-list {{ margin: 20px 0; }}
         .skin-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
         .skin-info {{ display: flex; align-items: center; gap: 12px; }}
@@ -332,7 +348,7 @@ async def mini_app(user_id: int = 1):
 </head>
 <body>
     <div class="container">
-        <!-- ЭКРАН 1: ГЛАВНЫЙ -->
+        <!-- ГЛАВНЫЙ ЭКРАН -->
         <div id="mainScreen" class="screen active">
             <div class="stats">
                 <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
@@ -347,16 +363,32 @@ async def mini_app(user_id: int = 1):
                 <button class="action-btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
                 <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
                 <button class="action-btn" id="openShopBtn">👕 Магазин</button>
-                <button class="action-btn" id="referralBtn">👥 Рефералы</button>
+                <button class="action-btn" id="openReferralBtn">👥 Рефералы</button>
                 <button class="action-btn" id="profileBtn">📊 Профиль</button>
             </div>
             <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
         </div>
         
-        <!-- ЭКРАН 2: МАГАЗИН -->
+        <!-- МАГАЗИН -->
         <div id="shopScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">👕 МАГАЗИН СКИНОВ</h3>
             <div id="skinsList" class="skin-list">Загрузка...</div>
+            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+        </div>
+        
+        <!-- РЕФЕРАЛЫ -->
+        <div id="referralScreen" class="screen">
+            <h3 style="color: white; text-align: center; margin-bottom: 20px;">👥 РЕФЕРАЛЫ</h3>
+            <div class="stats" style="margin-bottom: 20px;">
+                <div class="stat-row"><span class="stat-label">👥 Приглашено друзей</span><span class="stat-value" id="referralCount">0</span></div>
+                <div class="stat-row"><span class="stat-label">🎁 Не получено наград</span><span class="stat-value" id="unclaimedRewards">0</span></div>
+            </div>
+            <div id="referralLinkBox" style="background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px;">
+                <div style="color: #aaa; font-size: 12px; margin-bottom: 8px;">🔗 Твоя реферальная ссылка:</div>
+                <div id="referralLink" style="color: #ffd700; font-size: 12px; word-break: break-all; font-family: monospace;"></div>
+                <button class="action-btn full-width" id="copyReferralBtn" style="margin-top: 10px; background: #4caf50;">📋 Копировать ссылку</button>
+            </div>
+            <button class="action-btn full-width" id="claimReferralBtn" style="margin-bottom: 10px;">🎁 Забрать награду</button>
             <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
         </div>
     </div>
@@ -376,10 +408,15 @@ async def mini_app(user_id: int = 1):
         function showScreen(screenName) {{
             document.getElementById('mainScreen').classList.remove('active');
             document.getElementById('shopScreen').classList.remove('active');
+            document.getElementById('referralScreen').classList.remove('active');
             if (screenName === 'main') document.getElementById('mainScreen').classList.add('active');
             if (screenName === 'shop') {{
                 document.getElementById('shopScreen').classList.add('active');
                 loadSkins();
+            }}
+            if (screenName === 'referrals') {{
+                document.getElementById('referralScreen').classList.add('active');
+                loadReferralData();
             }}
         }}
         
@@ -405,44 +442,74 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadSkins() {{
-    try {{
-        const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
-        const data = await res.json();
-        const skinsList = document.getElementById('skinsList');
-        skinsList.innerHTML = '';
-        
-        for (const skin of data.skins) {{
-            const div = document.createElement('div');
-            div.className = 'skin-item';
-            div.innerHTML = `
-                <div class="skin-info">
-                    <span class="skin-emoji">${{skin.emoji}}</span>
-                    <div>
-                        <div class="skin-name">${{skin.name}}</div>
-                        <div class="skin-price">+${{skin.bonus}} к силе | ${{skin.price}} кликов</div>
-                    </div>
-                </div>
-            `;
-            
-            const btn = document.createElement('button');
-            if (skin.owned && skin.equipped) {{
-                btn.textContent = '✅ ЭКИПИРОВАН';
-                btn.className = 'skin-btn equipped';
-                btn.disabled = true;
-            }} else if (skin.owned) {{
-                btn.textContent = '⚡ ЭКИПИРОВАТЬ';
-                btn.className = 'skin-btn';
-                btn.onclick = () => equipSkin(skin.id);
-            }} else {{
-                btn.textContent = `💎 КУПИТЬ (${{skin.price}})`;
-                btn.className = 'skin-btn';
-                btn.onclick = () => buySkin(skin.id);
-            }}
-            div.appendChild(btn);
-            skinsList.appendChild(div);
+            try {{
+                const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
+                const data = await res.json();
+                const skinsList = document.getElementById('skinsList');
+                skinsList.innerHTML = '';
+                
+                for (const skin of data.skins) {{
+                    const div = document.createElement('div');
+                    div.className = 'skin-item';
+                    div.innerHTML = `
+                        <div class="skin-info">
+                            <span class="skin-emoji">${{skin.emoji}}</span>
+                            <div>
+                                <div class="skin-name">${{skin.name}}</div>
+                                <div class="skin-price">+${{skin.bonus}} к силе | ${{skin.price}} кликов</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const btn = document.createElement('button');
+                    if (skin.owned && skin.equipped) {{
+                        btn.textContent = '✅ ЭКИПИРОВАН';
+                        btn.className = 'skin-btn equipped';
+                        btn.disabled = true;
+                    }} else if (skin.owned) {{
+                        btn.textContent = '⚡ ЭКИПИРОВАТЬ';
+                        btn.className = 'skin-btn';
+                        btn.onclick = () => equipSkin(skin.id);
+                    }} else {{
+                        btn.textContent = `💎 КУПИТЬ (${{skin.price}})`;
+                        btn.className = 'skin-btn';
+                        btn.onclick = () => buySkin(skin.id);
+                    }}
+                    div.appendChild(btn);
+                    skinsList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
         }}
-    }} catch(e) {{ console.error(e); }}
-}}
+        
+        async function loadReferralData() {{
+            try {{
+                const res = await fetch(`/api/get_referrals?user_id=${{userId}}`);
+                const data = await res.json();
+                document.getElementById('referralCount').textContent = data.count;
+                document.getElementById('unclaimedRewards').textContent = data.unclaimed;
+                
+                const botUsername = tg.initDataUnsafe?.user?.username || 'ZetaClickerRobot';
+                const referralLink = `https://t.me/${{botUsername}}?start=ref_${{userId}}`;
+                document.getElementById('referralLink').textContent = referralLink;
+                
+                document.getElementById('copyReferralBtn').onclick = () => {{
+                    navigator.clipboard.writeText(referralLink);
+                    tg.showPopup({{title: '✅ Скопировано!', message: 'Реферальная ссылка скопирована', buttons: [{{type: 'ok'}}]}});
+                }};
+                
+                document.getElementById('claimReferralBtn').onclick = async () => {{
+                    const claimRes = await fetch(`/api/claim_referral?user_id=${{userId}}`, {{method: 'POST'}});
+                    const claimData = await claimRes.json();
+                    if (claimData.success) {{
+                        tg.showPopup({{title: '🎉 Награда получена!', message: `+${{claimData.reward}} кликов!`, buttons: [{{type: 'ok'}}]}});
+                        await loadStats();
+                        await loadReferralData();
+                    }} else {{
+                        tg.showPopup({{title: '❌ Нет наград', message: claimData.message, buttons: [{{type: 'ok'}}]}});
+                    }}
+                }};
+            }} catch(e) {{ console.error(e); }}
+        }}
         
         async function buySkin(skinId) {{
             const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
@@ -489,7 +556,6 @@ async def mini_app(user_id: int = 1):
             setTimeout(() => el.remove(), 600);
         }}
         
-        // Обработчики кнопок
         document.getElementById('duck').onclick = async (e) => {{
             const rect = e.target.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
@@ -545,12 +611,7 @@ async def mini_app(user_id: int = 1):
         }};
         
         document.getElementById('openShopBtn').onclick = () => showScreen('shop');
-        
-        document.getElementById('referralBtn').onclick = async () => {{
-            const res = await fetch(`/api/get_referrals?user_id=${{userId}}`);
-            const data = await res.json();
-            tg.showPopup({{title: '👥 Рефералы', message: `Приглашено друзей: ${{data.count}}\\nНе получено наград: ${{data.unclaimed}}`, buttons: [{{type: 'ok'}}]}});
-        }};
+        document.getElementById('openReferralBtn').onclick = () => showScreen('referrals');
         
         document.getElementById('profileBtn').onclick = async () => {{
             const res = await fetch(`/api/stats/${{userId}}`);
