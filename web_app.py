@@ -754,6 +754,16 @@ async def get_cases(user_id: int):
 
 @app.get("/api/get_boosters")
 async def get_boosters_list(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, emoji, description, price_gems, price_clicks FROM boosters WHERE price_gems > 0 OR price_clicks > 0")
+    shop_boosters = cursor.fetchall()
+    
+    active = get_active_boosters(user_id)
+    conn.close()
+    
+    return {"shop_boosters": [{"id": b[0], "name": b[1], "emoji": b[2], "description": b[3], "price_gems": b[4], "price_clicks": b[5]} for b in shop_boosters],
+            "active_boosters": active}
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = get_user_stats(user_id)
