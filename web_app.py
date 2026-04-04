@@ -1400,17 +1400,18 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function buyBooster(boosterId) {{
-            const payment = confirm('Оплатить кликами? (Отмена — алмазами)') ? 'clicks' : 'gems';
-            const res = await fetch(`/api/buy_booster?user_id=${{userId}}&booster_id=${{boosterId}}&payment=${{payment}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Бустер активирован!', message: `${{data.booster_emoji}} ${{data.booster_name}} активирован!`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadBoosters();
-            }} else {{
-                tg.showPopup({{title: '❌ Не хватает ресурсов', message: `Нужно: ${{data.need}} ${'{' + (data.type === 'clicks' ? 'кликов' : 'алмазов') + '}'}`, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
+    const payment = confirm('Оплатить кликами? (Отмена — алмазами)') ? 'clicks' : 'gems';
+    const res = await fetch(`/api/buy_booster?user_id=${{userId}}&booster_id=${{boosterId}}&payment=${{payment}}`, {{method: 'POST'}});
+    const data = await res.json();
+    if (data.success) {{
+        tg.showPopup({{title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{{type: 'ok'}}]}});
+        await loadStats();
+        await loadBoosters();
+    }} else {{
+        let currency = data.type === 'clicks' ? 'кликов' : 'алмазов';
+        tg.showPopup({{title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + currency, buttons: [{{type: 'ok'}}]}});
+    }}
+}}
         
         async function loadAchievements() {{
             try {{
