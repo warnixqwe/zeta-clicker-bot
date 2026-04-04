@@ -1151,32 +1151,37 @@ async def mini_app(user_id: int = 1):
             }}
         }}
         
-        async function loadAchievements() {{
+        async function loadTournaments() {{
     try {{
-        const res = await fetch('/api/get_achievements?user_id=' + userId);
+        const res = await fetch('/api/get_tournaments?user_id=' + userId);
         const data = await res.json();
-        const achievementsList = document.getElementById('achievementsList');
-        achievementsList.innerHTML = '';
+        const tournamentsList = document.getElementById('tournamentsList');
+        tournamentsList.innerHTML = '';
         
-        for (const ach of data.achievements) {{
-            const div = document.createElement('div');
-            div.className = 'achievement-item';
-            
-            let emoji = ach.completed ? '🏆' : '🔒';
-            let statusText = ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>';
-            
-            div.innerHTML = `
-                <div class="achievement-info">
-                    <span class="achievement-emoji">${emoji}</span>
-                    <div>
-                        <div class="achievement-name">${ach.name}</div>
-                        <div class="achievement-desc">${ach.description} (${ach.condition})</div>
-                        <div class="achievement-desc">🎁 Награда: +${ach.reward_gems}💎 +${ach.reward_clicks}💰</div>
-                    </div>
-                </div>
-                ${statusText}
-            `;
-            achievementsList.appendChild(div);
+        if (data.tournaments.length === 0) {{
+            tournamentsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Активных турниров нет</div>';
+        }} else {{
+            for (const t of data.tournaments) {{
+                let leadersHtml = '<div class="leader-list"><strong>🏆 Топ-10:</strong>';
+                for (let i = 0; i < Math.min(t.leaders.length, 10); i++) {{
+                    leadersHtml += '<div class="leader-item"><span>' + (i+1) + '. Пользователь ' + t.leaders[i].user_id + '</span><span>' + t.leaders[i].score + ' кликов</span></div>';
+                }}
+                leadersHtml += '</div>';
+                
+                let endDate = new Date(t.end_date).toLocaleString();
+                
+                const div = document.createElement('div');
+                div.className = 'tournament-card';
+                div.innerHTML = `
+                    <div class="tournament-name">🎯 ${t.name}</div>
+                    <div class="tournament-desc">${t.description}</div>
+                    <div class="tournament-desc">📅 До: ${endDate}</div>
+                    <div class="tournament-desc">🎁 Награда: +${t.reward_gems}💎 +${t.reward_clicks}💰</div>
+                    <div class="tournament-desc">📊 Твой счёт: ${t.my_score} кликов</div>
+                    ${leadersHtml}
+                `;
+                tournamentsList.appendChild(div);
+            }}
         }}
     }} catch(e) {{ console.error(e); }}
 }}
