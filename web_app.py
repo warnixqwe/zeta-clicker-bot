@@ -405,44 +405,44 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadSkins() {{
-            try {{
-                const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
-                const data = await res.json();
-                const skinsList = document.getElementById('skinsList');
-                skinsList.innerHTML = '';
-                
-                for (const skin of data.skins) {{
-                    const div = document.createElement('div');
-                    div.className = 'skin-item';
-                    div.innerHTML = `
-                        <div class="skin-info">
-                            <span class="skin-emoji">${{skin.emoji}}</span>
-                            <div>
-                                <div class="skin-name">${{skin.name}}</div>
-                                <div class="skin-price">+${{skin.bonus}} к силе | ${'{:.0f}'.format(skin.price)} кликов</div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    const btn = document.createElement('button');
-                    if (skin.owned && skin.equipped) {{
-                        btn.textContent = '✅ ЭКИПИРОВАН';
-                        btn.className = 'skin-btn equipped';
-                        btn.disabled = true;
-                    }} else if (skin.owned) {{
-                        btn.textContent = '⚡ ЭКИПИРОВАТЬ';
-                        btn.className = 'skin-btn';
-                        btn.onclick = () => equipSkin(skin.id);
-                    }} else {{
-                        btn.textContent = `💎 КУПИТЬ (${'{:.0f}'.format(skin.price)})`;
-                        btn.className = 'skin-btn';
-                        btn.onclick = () => buySkin(skin.id);
-                    }}
-                    div.appendChild(btn);
-                    skinsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
+    try {{
+        const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
+        const data = await res.json();
+        const skinsList = document.getElementById('skinsList');
+        skinsList.innerHTML = '';
+        
+        for (const skin of data.skins) {{
+            const div = document.createElement('div');
+            div.className = 'skin-item';
+            div.innerHTML = `
+                <div class="skin-info">
+                    <span class="skin-emoji">${{skin.emoji}}</span>
+                    <div>
+                        <div class="skin-name">${{skin.name}}</div>
+                        <div class="skin-price">+${{skin.bonus}} к силе | ${{skin.price}} кликов</div>
+                    </div>
+                </div>
+            `;
+            
+            const btn = document.createElement('button');
+            if (skin.owned && skin.equipped) {{
+                btn.textContent = '✅ ЭКИПИРОВАН';
+                btn.className = 'skin-btn equipped';
+                btn.disabled = true;
+            }} else if (skin.owned) {{
+                btn.textContent = '⚡ ЭКИПИРОВАТЬ';
+                btn.className = 'skin-btn';
+                btn.onclick = () => equipSkin(skin.id);
+            }} else {{
+                btn.textContent = `💎 КУПИТЬ (${{skin.price}})`;
+                btn.className = 'skin-btn';
+                btn.onclick = () => buySkin(skin.id);
+            }}
+            div.appendChild(btn);
+            skinsList.appendChild(div);
         }}
+    }} catch(e) {{ console.error(e); }}
+}}
         
         async function buySkin(skinId) {{
             const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
