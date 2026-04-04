@@ -1050,25 +1050,32 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadCases() {{
-            try {{
-                const res = await fetch(`/api/get_cases?user_id=${{userId}}`);
-                const data = await res.json();
-                const casesList = document.getElementById('casesList');
-                casesList.innerHTML = '';
-                
-                for (const caseItem of data.cases) {{
-                    const div = document.createElement('div');
-                    div.className = 'case-container';
-                    div.innerHTML = `
-                        <div class="case-box" onclick="openCase(${{caseItem.id}})">
-                            <div class="case-emoji">${{caseItem.emoji}}</div>
-                            <div class="case-price">${{caseItem.name}}<br>${'{' + (caseItem.price_clicks > 0 ? caseItem.price_clicks + ' кликов' : caseItem.price_gems + ' алмазов') + '}'}</div>
-                        </div>
-                    `;
-                    casesList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
+    try {{
+        const res = await fetch(`/api/get_cases?user_id=${{userId}}`);
+        const data = await res.json();
+        const casesList = document.getElementById('casesList');
+        casesList.innerHTML = '';
+        
+        for (const caseItem of data.cases) {{
+            let priceText = '';
+            if (caseItem.price_clicks > 0) {{
+                priceText = caseItem.price_clicks + ' кликов';
+            }} else {{
+                priceText = caseItem.price_gems + ' алмазов';
+            }}
+            
+            const div = document.createElement('div');
+            div.className = 'case-container';
+            div.innerHTML = `
+                <div class="case-box" onclick="openCase(${{caseItem.id}})">
+                    <div class="case-emoji">${{caseItem.emoji}}</div>
+                    <div class="case-price">${{caseItem.name}}<br>${{priceText}}</div>
+                </div>
+            `;
+            casesList.appendChild(div);
         }}
+    }} catch(e) {{ console.error(e); }}
+}}
         
         async function openCase(caseId) {{
             const res = await fetch(`/api/open_case?user_id=${{userId}}&case_id=${{caseId}}`, {{method: 'POST'}});
