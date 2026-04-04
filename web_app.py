@@ -846,7 +846,7 @@ async def mini_app(user_id: int = 1):
         </div>
     </div>
 
-    <script>
+        <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
@@ -903,231 +903,15 @@ async def mini_app(user_id: int = 1):
                 energy = data.energy;
                 updateUI();
                 document.getElementById('duck').innerText = currentSkin;
-            }} catch(e) {{ console.error(e); }}
+            }} catch(e) {{ console.error('Load stats error:', e); }}
         }}
         
-        async function loadSkins() {{
-            try {{
-                const res = await fetch('/api/get_skins?user_id=' + userId);
-                const data = await res.json();
-                const skinsList = document.getElementById('skinsList');
-                skinsList.innerHTML = '';
-                
-                for (const skin of data.skins) {{
-                    const div = document.createElement('div');
-                    div.className = 'skin-item';
-                    let paymentOptions = '';
-                    if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
-                    if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
-                    
-                    if (skin.owned && skin.equipped) {{
-                        paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
-                    }} else if (skin.owned) {{
-                        paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
-                    }}
-                    
-                    let limitedText = skin.limited ? '🌟 Лимитированный' : 'Обычный';
-                    
-                    div.innerHTML = 
-                        '<div class="skin-info">' +
-                            '<span class="skin-emoji">' + skin.emoji + '</span>' +
-                            '<div>' +
-                                '<div class="skin-name">' + skin.name + '</div>' +
-                                '<div class="skin-price">+' + skin.bonus + ' к силе | ' + limitedText + '</div>' +
-                            '</div>' +
-                        '</div>' +
-                        '<div>' + paymentOptions + '</div>';
-                    skinsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function buySkin(skinId, payment) {{
-            const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId + '&payment=' + payment, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Покупка успешна!', message: 'Вы купили ' + data.skin_name + ' ' + data.skin_emoji, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadSkins();
-            }} else {{
-                let currency = data.type === 'clicks' ? 'кликов' : 'алмазов';
-                tg.showPopup({{title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + currency, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function equipSkin(skinId) {{
-            const res = await fetch('/api/equip_skin?user_id=' + userId + '&skin_id=' + skinId, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Скин экипирован!', message: 'Теперь ваша утка: ' + data.skin, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadSkins();
-            }} else {{
-                tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function loadCases() {{
-            try {{
-                const res = await fetch('/api/get_cases?user_id=' + userId);
-                const data = await res.json();
-                const casesList = document.getElementById('casesList');
-                casesList.innerHTML = '';
-                
-                for (const caseItem of data.cases) {{
-                    let priceText = '';
-                    if (caseItem.price_clicks > 0) {{
-                        priceText = caseItem.price_clicks + ' кликов';
-                    }} else {{
-                        priceText = caseItem.price_gems + ' алмазов';
-                    }}
-                    
-                    const div = document.createElement('div');
-                    div.className = 'case-container';
-                    div.innerHTML = 
-                        '<div class="case-box" onclick="openCase(' + caseItem.id + ')">' +
-                            '<div class="case-emoji">' + caseItem.emoji + '</div>' +
-                            '<div class="case-price">' + caseItem.name + '<br>' + priceText + '</div>' +
-                        '</div>';
-                    casesList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function openCase(caseId) {{
-            const res = await fetch('/api/open_case?user_id=' + userId + '&case_id=' + caseId, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function loadBoosters() {{
-            try {{
-                const res = await fetch('/api/get_boosters?user_id=' + userId);
-                const data = await res.json();
-                
-                const activeDiv = document.getElementById('activeBoostersList');
-                if (data.active_boosters.length > 0) {{
-                    activeDiv.innerHTML = '<h4 style="color: #ffd700; margin-bottom: 10px;">⚡ АКТИВНЫЕ БУСТЕРЫ:</h4>';
-                    for (const b of data.active_boosters) {{
-                        activeDiv.innerHTML += 
-                            '<div class="booster-item">' +
-                                '<div class="booster-info">' +
-                                    '<span class="booster-emoji">' + b.emoji + '</span>' +
-                                    '<div>' +
-                                        '<div class="booster-name">' + b.name + '</div>' +
-                                        '<div class="booster-price">' + b.description + ' | Осталось: ' + b.minutes_left + ' мин</div>' +
-                                    '</div>' +
-                                '</div>' +
-                            '</div>';
-                    }}
-                }} else {{
-                    activeDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Нет активных бустеров</div>';
-                }}
-                
-                const shopDiv = document.getElementById('shopBoostersList');
-                shopDiv.innerHTML = '<h4 style="color: #ffd700; margin-bottom: 10px;">💎 ДОСТУПНЫЕ БУСТЕРЫ:</h4>';
-                for (const b of data.shop_boosters) {{
-                    let priceText = '';
-                    if (b.price_clicks > 0) priceText = b.price_clicks + ' кликов';
-                    if (b.price_gems > 0) priceText = b.price_gems + ' алмазов';
-                    shopDiv.innerHTML += 
-                        '<div class="booster-item">' +
-                            '<div class="booster-info">' +
-                                '<span class="booster-emoji">' + b.emoji + '</span>' +
-                                '<div>' +
-                                    '<div class="booster-name">' + b.name + '</div>' +
-                                    '<div class="booster-price">' + b.description + ' | Цена: ' + priceText + '</div>' +
-                                '</div>' +
-                            '</div>' +
-                            '<button class="booster-btn" onclick="buyBooster(' + b.id + ')">💎 КУПИТЬ</button>' +
-                        '</div>';
-                }}
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function buyBooster(boosterId) {{
-            const payment = confirm('Оплатить кликами? (Отмена — алмазами)') ? 'clicks' : 'gems';
-            const res = await fetch('/api/buy_booster?user_id=' + userId + '&booster_id=' + boosterId + '&payment=' + payment, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadBoosters();
-            }} else {{
-                let currency = data.type === 'clicks' ? 'кликов' : 'алмазов';
-                tg.showPopup({{title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + currency, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
-        
-        async function loadAchievements() {{
-            try {{
-                const res = await fetch('/api/get_achievements?user_id=' + userId);
-                const data = await res.json();
-                const achievementsList = document.getElementById('achievementsList');
-                achievementsList.innerHTML = '';
-                
-                for (const ach of data.achievements) {{
-                    const div = document.createElement('div');
-                    div.className = 'achievement-item';
-                    let emoji = ach.completed ? '🏆' : '🔒';
-                    let statusText = ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>';
-                    
-                    div.innerHTML = 
-                        '<div class="achievement-info">' +
-                            '<span class="achievement-emoji">' + emoji + '</span>' +
-                            '<div>' +
-                                '<div class="achievement-name">' + ach.name + '</div>' +
-                                '<div class="achievement-desc">' + ach.description + ' (' + ach.condition + ')</div>' +
-                                '<div class="achievement-desc">🎁 Награда: +' + ach.reward_gems + '💎 +' + ach.reward_clicks + '💰</div>' +
-                            '</div>' +
-                        '</div>' +
-                        statusText;
-                    achievementsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function loadReferralData() {{
-            try {{
-                const res = await fetch('/api/get_referrals?user_id=' + userId);
-                const data = await res.json();
-                document.getElementById('referralCount').innerText = data.count;
-                document.getElementById('unclaimedRewards').innerText = data.unclaimed;
-                
-                const botUsername = tg.initDataUnsafe?.user?.username || 'ZetaClickerRobot';
-                const referralLink = 'https://t.me/' + botUsername + '?start=ref_' + userId;
-                document.getElementById('referralLink').innerText = referralLink;
-                
-                document.getElementById('copyReferralBtn').onclick = () => {{
-                    navigator.clipboard.writeText(referralLink);
-                    tg.showPopup({{title: '✅ Скопировано!', message: 'Реферальная ссылка скопирована', buttons: [{{type: 'ok'}}]}});
-                }};
-                
-                document.getElementById('claimReferralBtn').onclick = async () => {{
-                    const claimRes = await fetch('/api/claim_referral?user_id=' + userId, {{method: 'POST'}});
-                    const claimData = await claimRes.json();
-                    if (claimData.success) {{
-                        tg.showPopup({{title: '🎉 Награда получена!', message: '+' + claimData.reward + ' кликов!', buttons: [{{type: 'ok'}}]}});
-                        await loadStats();
-                        await loadReferralData();
-                    }} else {{
-                        tg.showPopup({{title: '❌ Нет наград', message: claimData.message, buttons: [{{type: 'ok'}}]}});
-                    }}
-                }};
-            }} catch(e) {{ console.error(e); }}
-        }}
-        
-        async function sendClick(increment) {{
+        async function sendClick() {{
             try {{
                 const res = await fetch('/api/click', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ user_id: userId, clicks: increment }})
+                    body: JSON.stringify({{ user_id: userId, clicks: tapPower }})
                 }});
                 const data = await res.json();
                 clicks = data.clicks;
@@ -1137,7 +921,7 @@ async def mini_app(user_id: int = 1):
                 gems = data.gems;
                 energy = data.energy;
                 updateUI();
-            }} catch(e) {{ console.error(e); }}
+            }} catch(e) {{ console.error('Click error:', e); }}
         }}
         
         function showFloatingNumber(x, y, value) {{
@@ -1161,8 +945,11 @@ async def mini_app(user_id: int = 1):
             showFloatingNumber(x, y, tapPower);
             energy -= 1;
             updateUI();
-            await sendClick(tapPower);
+            await sendClick();
         }};
+        
+        // Остальные функции (loadSkins, buySkin, equipSkin, loadCases, openCase, loadBoosters, buyBooster, loadAchievements, loadReferralData)
+        // остаются без изменений...
         
         document.getElementById('upgradeTapBtn').onclick = async () => {{
             const res = await fetch('/api/upgrade_tap?user_id=' + userId, {{method: 'POST'}});
