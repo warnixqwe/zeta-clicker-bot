@@ -86,6 +86,30 @@ async def handle_click(data: ClickData):
         "gems": stats["gems"]
     }
 
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT clicks, tap_power FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    clicks, tap_power = result
+    price = tap_power * 100
+    
+    if clicks >= price:
+        new_tap_power = tap_power + 1
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_tap_power": new_tap_power, "new_clicks": new_clicks}
+    else:
+        conn.close()
+        return {"success": False, "need": price, "clicks": clicks}
+
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
     return get_user_stats(user_id)
@@ -221,6 +245,8 @@ async def mini_app(user_id: int = 1):
                 if (data.success) {{
                     tg.showPopup({{title: '✅ Улучшено!', message: 'Сила клика: +' + data.new_tap_power, buttons: [{{type: 'ok'}}]}});
                     await loadStats();
+                }} else {{
+                    tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
                 }}
             }} else {{
                 tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + price + ' кликов', buttons: [{{type: 'ok'}}]}});
