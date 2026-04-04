@@ -1289,16 +1289,17 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function buySkin(skinId, payment) {{
-            const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}&payment=${{payment}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '✅ Покупка успешна!', message: `Вы купили ${{data.skin_name}} ${{data.skin_emoji}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-                await loadSkins();
-            }} else {{
-                tg.showPopup({{title: '❌ Не хватает ресурсов', message: `Нужно: ${{data.need}} ${'{' + (data.type === 'clicks' ? 'кликов' : 'алмазов') + '}'}`, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
+    const res = await fetch(`/api/buy_skin?user_id=${{userId}}&skin_id=${{skinId}}&payment=${{payment}}`, {{method: 'POST'}});
+    const data = await res.json();
+    if (data.success) {{
+        tg.showPopup({{title: '✅ Покупка успешна!', message: 'Вы купили ' + data.skin_name + ' ' + data.skin_emoji, buttons: [{{type: 'ok'}}]}});
+        await loadStats();
+        await loadSkins();
+    }} else {{
+        let currency = data.type === 'clicks' ? 'кликов' : 'алмазов';
+        tg.showPopup({{title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + currency, buttons: [{{type: 'ok'}}]}});
+    }}
+}}
         
         async function equipSkin(skinId) {{
             const res = await fetch(`/api/equip_skin?user_id=${{userId}}&skin_id=${{skinId}}`, {{method: 'POST'}});
