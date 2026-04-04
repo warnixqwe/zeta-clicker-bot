@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -22,7 +21,12 @@ def get_user_stats(user_id: int):
     result = cursor.fetchone()
     conn.close()
     if result:
-        return {"clicks": result[0], "level": result[1], "tap_power": result[2], "skin": result[3] or "🦆"}
+        return {
+            "clicks": result[0],
+            "level": result[1],
+            "tap_power": result[2],
+            "skin": result[3] if result[3] else "🦆"
+        }
     return {"clicks": 0, "level": 1, "tap_power": 1, "skin": "🦆"}
 
 def update_clicks(user_id: int, increment: int):
@@ -40,23 +44,37 @@ def update_clicks(user_id: int, increment: int):
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(request: Request, user_id: int = 1):
     stats = get_user_stats(user_id)
-    return templates.TemplateResponse("game.html", {
-        "request": request,
-        "user_id": user_id,
+    return templates.TemplateResponse(
+        "game.html",
+        {
+            "request": request,
+            "user_id": user_id,
+            "clicks": int(stats["clicks"]),
+            "level": int(stats["level"]),
+            "tap_power": int(stats["tap_power"]),
+            "skin": str(stats["skin"])
+        }
+    )
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    update_clicks(data.user_id, data.clicks)
+    stats = get_user_stats(data.user_id)
+    return JSONResponse(content={
+        "clicks": stats["clicks"],
+        "level": stats["level"],
+        "tap_power": stats["tap_power"]
+    })
+
+@app.get("/api/stats/{user_id}")
+async def get_stats(user_id: int):
+    stats = get_user_stats(user_id)
+    return JSONResponse(content={
         "clicks": stats["clicks"],
         "level": stats["level"],
         "tap_power": stats["tap_power"],
         "skin": stats["skin"]
     })
-
-@app.post("/api/click")
-async def handle_click(data: ClickData):
-    update_clicks(data.user_id, data.clicks)
-    return JSONResponse(content=get_user_stats(data.user_id))
-
-@app.get("/api/stats/{user_id}")
-async def get_stats(user_id: int):
-    return JSONResponse(content=get_user_stats(user_id))
 
 @app.get("/health")
 async def health():
