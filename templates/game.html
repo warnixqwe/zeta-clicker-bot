@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -13,7 +13,6 @@
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
-
         body {
             min-height: 100vh;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -23,105 +22,37 @@
             justify-content: center;
             align-items: center;
         }
-
-        /* Основной контейнер — ширина 100%, но с максимальным лимитом */
-        .app-container {
+        .container {
             max-width: 500px;
             width: 100%;
-            margin: 0 auto;
             background: rgba(255,255,255,0.05);
             border-radius: 32px;
             backdrop-filter: blur(10px);
             padding: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
         }
-
-        /* ========== ВЕРХНЯЯ СТАТИСТИКА ========== */
-        .stats-grid {
+        .stats {
             background: rgba(0,0,0,0.3);
             border-radius: 24px;
             padding: 16px;
             margin-bottom: 24px;
         }
-
         .stat-row {
             display: flex;
             justify-content: space-between;
-            align-items: baseline;
             padding: 8px 0;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
-
-        .stat-row:last-child {
-            border-bottom: none;
-        }
-
-        .stat-label {
-            color: #aaa;
-            font-size: 14px;
-        }
-
-        .stat-value {
-            color: #ffd700;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        /* ========== УТКА (кликабельный центр) ========== */
-        .duck-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin: 20px 0;
-        }
-
-        .duck {
-            font-size: 180px;
-            cursor: pointer;
-            transition: transform 0.1s ease;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
-        }
-
-        .duck:active {
-            transform: scale(0.94);
-        }
-
-        /* ========== ЭНЕРГИЯ (прогресс-бар) ========== */
-        .energy-section {
-            margin: 20px 0;
-        }
-
-        .energy-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: #aaa;
-            margin-bottom: 6px;
-        }
-
-        .energy-bar-bg {
-            background: rgba(255,255,255,0.15);
-            border-radius: 12px;
-            height: 12px;
-            overflow: hidden;
-        }
-
-        .energy-fill {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, #00c6ff, #0072ff);
-            border-radius: 12px;
-            transition: width 0.2s ease;
-        }
-
-        /* ========== СЕТКА КНОПОК (2 колонки, идеально ровно) ========== */
-        .button-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin: 24px 0;
-        }
-
+        .stat-row:last-child { border-bottom: none; }
+        .stat-label { color: #aaa; font-size: 14px; }
+        .stat-value { color: #ffd700; font-size: 20px; font-weight: bold; }
+        .duck-container { display: flex; justify-content: center; margin: 20px 0; }
+        .duck { font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }
+        .duck:active { transform: scale(0.94); }
+        .energy-section { margin: 20px 0; }
+        .energy-label { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 6px; }
+        .energy-bar-bg { background: rgba(255,255,255,0.15); border-radius: 12px; height: 12px; overflow: hidden; }
+        .energy-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #00c6ff, #0072ff); border-radius: 12px; transition: width 0.2s; }
+        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }
         .action-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
@@ -131,96 +62,37 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
             text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
         }
-
-        .action-btn:active {
-            transform: scale(0.96);
-            opacity: 0.9;
-        }
-
-        /* Кнопка закрытия — одна на всю ширину */
-        .full-width-btn {
-            width: 100%;
-            background: rgba(255,255,255,0.1);
-            margin-top: 8px;
-        }
-
-        /* Анимация всплывающих чисел */
+        .action-btn:active { transform: scale(0.96); opacity: 0.9; }
+        .full-width { width: 100%; background: rgba(255,255,255,0.1); }
         .tap-value {
             position: fixed;
             pointer-events: none;
             font-size: 28px;
             font-weight: bold;
             color: #ffd700;
-            text-shadow: 0 0 8px rgba(0,0,0,0.5);
-            z-index: 1000;
             animation: floatUp 0.6s ease-out forwards;
+            z-index: 1000;
         }
-
         @keyframes floatUp {
-            0% {
-                opacity: 1;
-                transform: translateY(0) scale(0.8);
-            }
-            100% {
-                opacity: 0;
-                transform: translateY(-80px) scale(1.2);
-            }
-        }
-
-        /* Тёмная тема — адаптация под Telegram */
-        @media (prefers-color-scheme: dark) {
-            body {
-                background: linear-gradient(135deg, #0a0a1a 0%, #0f0f1f 100%);
-            }
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.2); }
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Статистика -->
-        <div class="stats-grid">
-            <div class="stat-row">
-                <span class="stat-label">🦆 Уровень</span>
-                <span class="stat-value" id="levelValue">1</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">💰 Клики</span>
-                <span class="stat-value" id="clicksValue">0</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">💪 Сила клика</span>
-                <span class="stat-value" id="tapPowerValue">+1</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">⏱️ Пассивный доход</span>
-                <span class="stat-value" id="passiveValue">0/час</span>
-            </div>
+    <div class="container">
+        <div class="stats">
+            <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{{ level }}</span></div>
+            <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{{ clicks }}</span></div>
+            <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{{ tap_power }}</span></div>
         </div>
-
-        <!-- Утка (клик) -->
-        <div class="duck-container">
-            <div class="duck" id="duck">🦆</div>
-        </div>
-
-        <!-- Энергия -->
+        <div class="duck-container"><div class="duck" id="duck">{{ skin }}</div></div>
         <div class="energy-section">
-            <div class="energy-label">
-                <span>⚡ Энергия</span>
-                <span id="energyText">1000/1000</span>
-            </div>
-            <div class="energy-bar-bg">
-                <div class="energy-fill" id="energyFill" style="width: 100%"></div>
-            </div>
+            <div class="energy-label"><span>⚡ Энергия</span><span id="energyText">1000/1000</span></div>
+            <div class="energy-bar-bg"><div class="energy-fill" id="energyFill" style="width: 100%"></div></div>
         </div>
-
-        <!-- Сетка кнопок (ровно 2 колонки) -->
         <div class="button-grid">
             <button class="action-btn" id="profileBtn">📊 Профиль</button>
             <button class="action-btn" id="shopBtn">👕 Магазин</button>
@@ -231,51 +103,38 @@
             <button class="action-btn" id="passiveBtn">💰 Пассивка</button>
             <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
         </div>
-
-        <!-- Закрыть Mini App -->
-        <button class="action-btn full-width-btn" id="closeBtn">✖️ Закрыть</button>
+        <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
     </div>
-
     <script>
-        // Инициализация Telegram WebApp
         const tg = window.Telegram.WebApp;
         tg.ready();
-        tg.expand(); // Растягиваем на весь экран
-        tg.enableClosingConfirmation();
-
-        // Получаем user_id из URL (передан ботом)
+        tg.expand();
+        
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user_id') || 1;
-
-        // Элементы DOM
-        const duck = document.getElementById('duck');
-        const levelSpan = document.getElementById('levelValue');
-        const clicksSpan = document.getElementById('clicksValue');
-        const tapPowerSpan = document.getElementById('tapPowerValue');
-        const passiveSpan = document.getElementById('passiveValue');
-        const energyFill = document.getElementById('energyFill');
-        const energyText = document.getElementById('energyText');
-
-        // Состояние
-        let clicks = 0;
-        let level = 1;
-        let tapPower = 1;
-        let passiveIncome = 0;
+        
+        let clicks = {{ clicks }};
+        let level = {{ level }};
+        let tapPower = {{ tap_power }};
         let energy = 1000;
         let maxEnergy = 1000;
         let regenInterval = null;
-
-        // Функция обновления UI
+        
+        const duck = document.getElementById('duck');
+        const clicksSpan = document.getElementById('clicksValue');
+        const levelSpan = document.getElementById('levelValue');
+        const tapPowerSpan = document.getElementById('tapPowerValue');
+        const energyFill = document.getElementById('energyFill');
+        const energyText = document.getElementById('energyText');
+        
         function updateUI() {
             clicksSpan.textContent = clicks;
             levelSpan.textContent = level;
             tapPowerSpan.textContent = `+${tapPower}`;
-            passiveSpan.textContent = `${passiveIncome}/час`;
             energyFill.style.width = `${(energy / maxEnergy) * 100}%`;
             energyText.textContent = `${Math.floor(energy)}/${maxEnergy}`;
         }
-
-        // Всплывающая анимация
+        
         function showFloatingNumber(x, y, value) {
             const el = document.createElement('div');
             el.className = 'tap-value';
@@ -285,8 +144,7 @@
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 600);
         }
-
-        // Отправка клика на сервер
+        
         async function sendClick(increment) {
             try {
                 const response = await fetch('/api/click', {
@@ -299,12 +157,9 @@
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch(e) {
-                console.error('Click error:', e);
-            }
+            } catch(e) { console.error('Click error:', e); }
         }
-
-        // Восстановление энергии
+        
         function startEnergyRegen() {
             if (regenInterval) clearInterval(regenInterval);
             regenInterval = setInterval(() => {
@@ -317,32 +172,22 @@
                 }
             }, 1000);
         }
-
-        // Обработчик клика по утке
+        
         duck.addEventListener('click', async (e) => {
             if (energy <= 0) {
-                tg.showPopup({
-                    title: '😫 Нет энергии!',
-                    message: 'Подожди, энергия восстановится.',
-                    buttons: [{type: 'ok'}]
-                });
+                tg.showPopup({ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{type: 'ok'}] });
                 return;
             }
-
             const rect = duck.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top;
             showFloatingNumber(x, y, tapPower);
-
             energy = Math.max(0, energy - 1);
             updateUI();
-
             await sendClick(tapPower);
-
             if (energy < maxEnergy) startEnergyRegen();
         });
-
-        // Загрузка начальных данных с сервера
+        
         async function loadStats() {
             try {
                 const response = await fetch(`/api/stats/${userId}`);
@@ -351,28 +196,21 @@
                 level = data.level;
                 tapPower = data.tap_power;
                 updateUI();
-            } catch(e) {
-                console.error('Load stats error:', e);
-            }
+            } catch(e) { console.error('Load error:', e); }
         }
-
-        // Кнопки-заглушки (пока просто уведомления)
+        
         document.getElementById('profileBtn').onclick = () => tg.showPopup({title: 'Профиль', message: `Клики: ${clicks}\nУровень: ${level}\nСила: +${tapPower}`, buttons: [{type: 'ok'}]});
         document.getElementById('shopBtn').onclick = () => tg.showPopup({title: 'Магазин', message: 'Скоро тут будут скины!', buttons: [{type: 'ok'}]});
-        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({title: 'Прокачка', message: 'Скоро можно будет улучшить силу клика!', buttons: [{type: 'ok'}]});
-        document.getElementById('questsBtn').onclick = () => tg.showPopup({title: 'Задания', message: 'Ежедневные задания будут скоро', buttons: [{type: 'ok'}]});
-        document.getElementById('leaderboardBtn').onclick = () => tg.showPopup({title: 'Топ игроков', message: 'Скоро появится таблица лидеров', buttons: [{type: 'ok'}]});
-        document.getElementById('friendsBtn').onclick = () => tg.showPopup({title: 'Друзья', message: 'Реферальная система в разработке', buttons: [{type: 'ok'}]});
-        document.getElementById('passiveBtn').onclick = () => tg.showPopup({title: 'Пассивный доход', message: 'Доход будет начисляться автоматически', buttons: [{type: 'ok'}]});
+        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({title: 'Прокачка', message: 'Улучшай силу клика!', buttons: [{type: 'ok'}]});
+        document.getElementById('questsBtn').onclick = () => tg.showPopup({title: 'Задания', message: 'Ежедневные задания', buttons: [{type: 'ok'}]});
+        document.getElementById('leaderboardBtn').onclick = () => tg.showPopup({title: 'Топ игроков', message: 'Скоро появится', buttons: [{type: 'ok'}]});
+        document.getElementById('friendsBtn').onclick = () => tg.showPopup({title: 'Друзья', message: 'Реферальная система', buttons: [{type: 'ok'}]});
+        document.getElementById('passiveBtn').onclick = () => tg.showPopup({title: 'Пассивный доход', message: 'Доход будет начисляться', buttons: [{type: 'ok'}]});
         document.getElementById('dailyBtn').onclick = () => tg.showPopup({title: 'Ежедневный бонус', message: 'Заходи каждый день!', buttons: [{type: 'ok'}]});
         document.getElementById('closeBtn').onclick = () => tg.close();
-
-        // Инициализация
+        
         loadStats();
         startEnergyRegen();
-
-        // Сообщаем Telegram, что приложение готово
-        tg.ready();
     </script>
 </body>
 </html>
