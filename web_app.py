@@ -1014,7 +1014,6 @@ async def mini_app(user_id: int = 1):
         }}, 1000);
         // Тестовые вызовы API
         setTimeout(() => {
-            console.log('Testing API calls...');
             fetch('/api/get_skins?user_id=' + userId).then(r => r.json()).then(data => console.log('Skins:', data)).catch(e => console.error('Skins error:', e));
             fetch('/api/get_cases?user_id=' + userId).then(r => r.json()).then(data => console.log('Cases:', data)).catch(e => console.error('Cases error:', e));
             fetch('/api/get_boosters?user_id=' + userId).then(r => r.json()).then(data => console.log('Boosters:', data)).catch(e => console.error('Boosters error:', e));
