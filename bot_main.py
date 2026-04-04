@@ -29,13 +29,22 @@ async def cmd_start(message: types.Message):
         conn.commit()
     conn.close()
     
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🦆 Играть в Zeta Clicker!", web_app=WebAppInfo(url=web_app_url))]
+    ])
+    
     await message.answer(
-        f"🦆 **Добро пожаловать в Zeta Clicker!**\n\n"
-        f"💰 **Кликай по утке в Mini App и становись лучшим!**\n\n"
-        f"🎮 **Mini App:** `/game`\n"
-        f"👑 **Админ:** `/admin` (только для админа)\n"
-        f"💎 **Донат:** `/donate 100`\n\n"
-        f"📊 Твой ID: `{user_id}`",
+        "🦆 **Добро пожаловать в Zeta Clicker!**\n\n"
+        "Нажми на кнопку ниже, чтобы открыть игру.\n\n"
+        "✨ **В игре тебя ждут:**\n"
+        "• Кликай по утке и зарабатывай клики\n"
+        "• Прокачивай силу клика и энергию\n"
+        "• Покупай скины и получай бонусы\n"
+        "• Выполняй ежедневные задания\n"
+        "• Приглашай друзей и получай награды\n"
+        "• Соревнуйся в топе игроков\n\n"
+        "Погнали! 🚀",
+        reply_markup=keyboard,
         parse_mode="Markdown"
     )
 
