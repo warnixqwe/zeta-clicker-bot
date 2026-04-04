@@ -990,39 +990,41 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadSkins() {{
-            try {{
-                const res = await fetch('/api/get_skins?user_id=' + userId);
-                const data = await res.json();
-                const skinsList = document.getElementById('skinsList');
-                skinsList.innerHTML = '';
-                
-                for (const skin of data.skins) {{
-                    const div = document.createElement('div');
-                    div.className = 'skin-item';
-                    let paymentOptions = '';
-                    if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
-                    if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
-                    
-                    if (skin.owned && skin.equipped) {{
-                        paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
-                    }} else if (skin.owned) {{
-                        paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
-                    }}
-                    
-                    div.innerHTML = `
-                        <div class="skin-info">
-                            <span class="skin-emoji">${skin.emoji}</span>
-                            <div>
-                                <div class="skin-name">${skin.name}</div>
-                                <div class="skin-price">+${skin.bonus} к силе | ${skin.limited ? '🌟 Лимитированный' : 'Обычный'}</div>
-                            </div>
-                        </div>
-                        <div>${paymentOptions}</div>
-                    `;
-                    skinsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
+    try {{
+        const res = await fetch('/api/get_skins?user_id=' + userId);
+        const data = await res.json();
+        const skinsList = document.getElementById('skinsList');
+        skinsList.innerHTML = '';
+        
+        for (const skin of data.skins) {{
+            const div = document.createElement('div');
+            div.className = 'skin-item';
+            let paymentOptions = '';
+            if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
+            if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
+            
+            if (skin.owned && skin.equipped) {{
+                paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
+            }} else if (skin.owned) {{
+                paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
+            }}
+            
+            let limitedText = skin.limited ? '🌟 Лимитированный' : 'Обычный';
+            
+            div.innerHTML = `
+                <div class="skin-info">
+                    <span class="skin-emoji">${skin.emoji}</span>
+                    <div>
+                        <div class="skin-name">${skin.name}</div>
+                        <div class="skin-price">+${skin.bonus} к силе | ${limitedText}</div>
+                    </div>
+                </div>
+                <div>${paymentOptions}</div>
+            `;
+            skinsList.appendChild(div);
         }}
+    }} catch(e) {{ console.error(e); }}
+}}
         
         async function buySkin(skinId, payment) {{
             const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId + '&payment=' + payment, {{method: 'POST'}});
