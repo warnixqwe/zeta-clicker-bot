@@ -526,12 +526,11 @@ async def mini_app(user_id: int = 1):
             align-items: center;
         }}
         
-        /* Адаптация под тему Telegram */
         @media (prefers-color-scheme: light) {{
             body {{
                 background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
             }}
-            .container {{ background: rgba(255,255,255,0.9) !important; backdrop-filter: blur(10px); }}
+            .container {{ background: rgba(255,255,255,0.9) !important; }}
             .stat-label {{ color: #666 !important; }}
             .stat-value {{ color: #ff8c00 !important; }}
             .stats {{ background: rgba(0,0,0,0.05) !important; }}
@@ -547,14 +546,9 @@ async def mini_app(user_id: int = 1):
             backdrop-filter: blur(10px);
             padding: 20px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-            transition: all 0.3s ease;
         }}
         
-        .screen {{
-            display: none;
-            animation: fadeIn 0.3s ease;
-        }}
-        
+        .screen {{ display: none; animation: fadeIn 0.3s ease; }}
         .screen.active {{ display: block; }}
         
         @keyframes fadeIn {{
@@ -567,7 +561,6 @@ async def mini_app(user_id: int = 1):
             border-radius: 24px;
             padding: 16px;
             margin-bottom: 24px;
-            backdrop-filter: blur(5px);
         }}
         
         .stat-row {{
@@ -576,7 +569,6 @@ async def mini_app(user_id: int = 1):
             padding: 8px 0;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }}
-        
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
@@ -585,45 +577,38 @@ async def mini_app(user_id: int = 1):
             display: flex;
             justify-content: center;
             margin: 20px 0;
-            position: relative;
         }}
         
         .duck {{
             font-size: 180px;
             cursor: pointer;
-            transition: transform 0.1s ease, filter 0.2s ease;
+            transition: transform 0.1s ease;
             filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
         }}
+        .duck:active {{ transform: scale(0.92); }}
         
-        .duck:active {{
-            transform: scale(0.92);
-            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.3));
+        .button-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 24px 0;
         }}
         
         .btn {{
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             border-radius: 16px;
-            padding: 14px;
+            padding: 12px 8px;
             color: white;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            width: 100%;
-            margin-top: 12px;
-            transition: transform 0.1s ease, box-shadow 0.2s ease;
+            text-align: center;
+            transition: transform 0.1s ease;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }}
-        
-        .btn:active {{
-            transform: scale(0.97);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }}
-        
-        .back-btn {{
-            background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(5px);
-        }}
+        .btn:active {{ transform: scale(0.97); }}
+        .back-btn {{ background: rgba(255,255,255,0.15); }}
         
         .energy-bar {{
             width: 100%;
@@ -633,7 +618,6 @@ async def mini_app(user_id: int = 1):
             margin: 10px 0;
             overflow: hidden;
         }}
-        
         .energy-fill {{
             height: 100%;
             background: linear-gradient(90deg, #00ff88, #00cc66);
@@ -647,11 +631,9 @@ async def mini_app(user_id: int = 1):
             font-size: 32px;
             font-weight: bold;
             color: #ffd700;
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
             animation: floatUp 0.6s ease-out forwards;
             z-index: 1000;
         }}
-        
         @keyframes floatUp {{
             0% {{ opacity: 1; transform: translateY(0) scale(0.6); }}
             100% {{ opacity: 0; transform: translateY(-100px) scale(1.2); }}
@@ -671,19 +653,9 @@ async def mini_app(user_id: int = 1):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: transform 0.1s ease;
         }}
         
-        .skin-item:hover, .booster-item:hover, .case-item:hover {{
-            transform: scale(1.01);
-        }}
-        
-        .skin-info, .booster-info, .achievement-info {{
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }}
-        
+        .skin-info, .booster-info, .achievement-info {{ display: flex; align-items: center; gap: 12px; }}
         .skin-emoji, .booster-emoji, .case-emoji, .achievement-emoji {{ font-size: 40px; }}
         .skin-name, .booster-name, .achievement-name {{ font-size: 16px; font-weight: bold; }}
         .skin-price, .booster-price, .case-price, .achievement-desc {{ font-size: 12px; color: #ffd700; }}
@@ -695,54 +667,19 @@ async def mini_app(user_id: int = 1):
             padding: 8px 16px;
             color: white;
             cursor: pointer;
-            transition: transform 0.1s ease;
         }}
+        .case-open-btn {{ background: linear-gradient(135deg, #ffd700, #ff8c00); color: #333; font-weight: bold; }}
         
-        .skin-buy-btn:active, .booster-buy-btn:active, .case-open-btn:active {{
-            transform: scale(0.95);
-        }}
+        h3 {{ color: white; text-align: center; margin-bottom: 20px; font-size: 24px; }}
+        .achievement-completed {{ background: #4caf50; color: white; border-radius: 12px; padding: 4px 12px; font-size: 12px; }}
         
-        .case-open-btn {{
-            background: linear-gradient(135deg, #ffd700, #ff8c00);
-            color: #333;
-            font-weight: bold;
-        }}
-        
-        h3 {{
-            color: white;
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 24px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }}
-        
-        .achievement-completed {{
-            background: #4caf50;
-            color: white;
-            border-radius: 12px;
-            padding: 4px 12px;
-            font-size: 12px;
-        }}
-        
-        /* Стилизация скроллбара */
-        .skin-list::-webkit-scrollbar, .booster-list::-webkit-scrollbar {{
-            width: 5px;
-        }}
-        
-        .skin-list::-webkit-scrollbar-track {{
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-        }}
-        
-        .skin-list::-webkit-scrollbar-thumb {{
-            background: #667eea;
-            border-radius: 10px;
-        }}
+        .skin-list::-webkit-scrollbar, .booster-list::-webkit-scrollbar {{ width: 5px; }}
+        .skin-list::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.1); border-radius: 10px; }}
+        .skin-list::-webkit-scrollbar-thumb {{ background: #667eea; border-radius: 10px; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Главный экран -->
         <div id="mainScreen" class="screen active">
             <div class="stats">
                 <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
@@ -754,32 +691,31 @@ async def mini_app(user_id: int = 1):
             </div>
             <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
             <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
-            <button class="btn" id="upgradeTapBtn">💪 Улучшить тап</button>
-            <button class="btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
-            <button class="btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
-            <button class="btn" id="dailyBtn">🎁 Ежедневный бонус</button>
-            <button class="btn" id="openShopBtn">👕 Магазин скинов</button>
-            <button class="btn" id="openCasesBtn">📦 Кейсы</button>
-            <button class="btn" id="openBoostersBtn">⚡ Бустеры</button>
-            <button class="btn" id="openAchievementsBtn">🏆 Достижения</button>
-            <button class="btn" id="openLeaderboardBtn">🏆 Топ игроков</button>
+            <div class="button-grid">
+                <button class="btn" id="upgradeTapBtn">💪 Улучшить тап</button>
+                <button class="btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
+                <button class="btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
+                <button class="btn" id="dailyBtn">🎁 Ежедневный</button>
+                <button class="btn" id="openShopBtn">👕 Магазин</button>
+                <button class="btn" id="openCasesBtn">📦 Кейсы</button>
+                <button class="btn" id="openBoostersBtn">⚡ Бустеры</button>
+                <button class="btn" id="openAchievementsBtn">🏆 Достижения</button>
+                <button class="btn" id="openLeaderboardBtn">🏆 Топ</button>
+            </div>
         </div>
         
-        <!-- Магазин -->
         <div id="shopScreen" class="screen">
             <h3>👕 МАГАЗИН СКИНОВ</h3>
             <div id="skinsList" class="skin-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- Кейсы -->
         <div id="casesScreen" class="screen">
             <h3>📦 КЕЙСЫ</h3>
             <div id="casesList" class="case-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- Бустеры -->
         <div id="boostersScreen" class="screen">
             <h3>⚡ БУСТЕРЫ</h3>
             <div id="activeBoostersList" class="booster-list">Активные бустеры: загрузка...</div>
@@ -787,14 +723,12 @@ async def mini_app(user_id: int = 1):
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- Достижения -->
         <div id="achievementsScreen" class="screen">
             <h3>🏆 ДОСТИЖЕНИЯ</h3>
             <div id="achievementsList" class="achievement-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- Топ игроков -->
         <div id="leaderboardScreen" class="screen">
             <h3>🏆 ТОП ИГРОКОВ</h3>
             <div id="leaderboardList" class="leaderboard-list">Загрузка...</div>
@@ -807,7 +741,6 @@ async def mini_app(user_id: int = 1):
         tg.ready();
         tg.expand();
         
-        // Адаптация под тему Telegram
         if (tg.colorScheme === 'dark') {{
             document.body.style.background = 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)';
         }} else {{
