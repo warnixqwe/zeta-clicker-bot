@@ -9,6 +9,21 @@ import uvicorn
 
 app = FastAPI()
 
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+
+# Принудительный HTTPS (для ПК)
+app.add_middleware(HTTPSRedirectMiddleware)
+
+# CORS — разрешаем всё (для ПК)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class ClickData(BaseModel):
     user_id: int
     clicks: int
@@ -774,6 +789,20 @@ async def mini_app(user_id: int = 1):
     </style>
 </head>
 <body>
+<script>
+    // Фолбэк для Telegram Desktop
+    if (typeof window.Telegram === 'undefined') {
+        window.Telegram = {
+            WebApp: {
+                ready: () => {},
+                expand: () => {},
+                close: () => {},
+                showPopup: (data) => { alert(data.message); },
+                initDataUnsafe: { user: { username: 'ZetaClickerRobot' } }
+            }
+        };
+    }
+</script>
     <div class="container">
         <div id="mainScreen" class="screen active">
             <div class="stats">
