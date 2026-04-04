@@ -1152,30 +1152,34 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadAchievements() {{
-            try {{
-                const res = await fetch('/api/get_achievements?user_id=' + userId);
-                const data = await res.json();
-                const achievementsList = document.getElementById('achievementsList');
-                achievementsList.innerHTML = '';
-                
-                for (const ach of data.achievements) {{
-                    const div = document.createElement('div');
-                    div.className = 'achievement-item';
-                    div.innerHTML = `
-                        <div class="achievement-info">
-                            <span class="achievement-emoji">${ach.completed ? '🏆' : '🔒'}</span>
-                            <div>
-                                <div class="achievement-name">${ach.name}</div>
-                                <div class="achievement-desc">${ach.description} (${ach.condition})</div>
-                                <div class="achievement-desc">🎁 Награда: +${ach.reward_gems}💎 +${ach.reward_clicks}💰</div>
-                            </div>
-                        </div>
-                        ${ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>'}
-                    `;
-                    achievementsList.appendChild(div);
-                }}
-            }} catch(e) {{ console.error(e); }}
+    try {{
+        const res = await fetch('/api/get_achievements?user_id=' + userId);
+        const data = await res.json();
+        const achievementsList = document.getElementById('achievementsList');
+        achievementsList.innerHTML = '';
+        
+        for (const ach of data.achievements) {{
+            const div = document.createElement('div');
+            div.className = 'achievement-item';
+            
+            let emoji = ach.completed ? '🏆' : '🔒';
+            let statusText = ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>';
+            
+            div.innerHTML = `
+                <div class="achievement-info">
+                    <span class="achievement-emoji">${emoji}</span>
+                    <div>
+                        <div class="achievement-name">${ach.name}</div>
+                        <div class="achievement-desc">${ach.description} (${ach.condition})</div>
+                        <div class="achievement-desc">🎁 Награда: +${ach.reward_gems}💎 +${ach.reward_clicks}💰</div>
+                    </div>
+                </div>
+                ${statusText}
+            `;
+            achievementsList.appendChild(div);
         }}
+    }} catch(e) {{ console.error(e); }}
+}}
         
         async function loadTournaments() {{
             try {{
