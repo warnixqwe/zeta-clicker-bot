@@ -1342,15 +1342,15 @@ async def mini_app(user_id: int = 1):
 }}
         
         async function openCase(caseId) {{
-            const res = await fetch(`/api/open_case?user_id=${{userId}}&case_id=${{caseId}}`, {{method: 'POST'}});
-            const data = await res.json();
-            if (data.success) {{
-                tg.showPopup({{title: '🎁 Открытие кейса!', message: `${{data.case_emoji}} Вы получили: ${{data.reward_text}}`, buttons: [{{type: 'ok'}}]}});
-                await loadStats();
-            }} else {{
-                tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
-            }}
-        }}
+    const res = await fetch(`/api/open_case?user_id=${{userId}}&case_id=${{caseId}}`, {{method: 'POST'}});
+    const data = await res.json();
+    if (data.success) {{
+        tg.showPopup({{title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{{type: 'ok'}}]}});
+        await loadStats();
+    }} else {{
+        tg.showPopup({{title: '❌ Ошибка', message: data.message, buttons: [{{type: 'ok'}}]}});
+    }}
+}}
         
         async function loadBoosters() {{
             try {{
