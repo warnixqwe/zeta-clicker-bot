@@ -1017,6 +1017,121 @@ async def mini_app(user_id: int = 1):
         window.loadBoosters = loadBoosters;
         window.loadAchievements = loadAchievements;
         window.loadReferralData = loadReferralData;
+        async function loadSkins() {
+    try {
+        const res = await fetch('/api/get_skins?user_id=' + userId);
+        const data = await res.json();
+        const skinsList = document.getElementById('skinsList');
+        skinsList.innerHTML = '';
+        for (const skin of data.skins) {
+            const div = document.createElement('div');
+            div.className = 'skin-item';
+            let paymentOptions = '';
+            if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
+            if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
+            if (skin.owned && skin.equipped) {
+                paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
+            } else if (skin.owned) {
+                paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
+            }
+            let limitedText = skin.limited ? '🌟 Лимитированный' : 'Обычный';
+            div.innerHTML = '<div class="skin-info">' +
+                '<span class="skin-emoji">' + skin.emoji + '</span>' +
+                '<div>' +
+                '<div class="skin-name">' + skin.name + '</div>' +
+                '<div class="skin-price">+' + skin.bonus + ' к силе | ' + limitedText + '</div>' +
+                '</div>' +
+                '</div>' +
+                '<div>' + paymentOptions + '</div>';
+            skinsList.appendChild(div);
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function loadCases() {
+    try {
+        const res = await fetch('/api/get_cases?user_id=' + userId);
+        const data = await res.json();
+        const casesList = document.getElementById('casesList');
+        casesList.innerHTML = '';
+        for (const caseItem of data.cases) {
+            let priceText = caseItem.price_clicks > 0 ? caseItem.price_clicks + ' кликов' : caseItem.price_gems + ' алмазов';
+            const div = document.createElement('div');
+            div.className = 'case-container';
+            div.innerHTML = '<div class="case-box" onclick="openCase(' + caseItem.id + ')">' +
+                '<div class="case-emoji">' + caseItem.emoji + '</div>' +
+                '<div class="case-price">' + caseItem.name + '<br>' + priceText + '</div>' +
+                '</div>';
+            casesList.appendChild(div);
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function loadBoosters() {
+    try {
+        const res = await fetch('/api/get_boosters?user_id=' + userId);
+        const data = await res.json();
+        const activeDiv = document.getElementById('activeBoostersList');
+        if (data.active_boosters.length > 0) {
+            activeDiv.innerHTML = '<h4 style="color: #ffd700; margin-bottom: 10px;">⚡ АКТИВНЫЕ БУСТЕРЫ:</h4>';
+            for (const b of data.active_boosters) {
+                activeDiv.innerHTML += '<div class="booster-item">' +
+                    '<div class="booster-info">' +
+                    '<span class="booster-emoji">' + b.emoji + '</span>' +
+                    '<div>' +
+                    '<div class="booster-name">' + b.name + '</div>' +
+                    '<div class="booster-price">' + b.description + ' | Осталось: ' + b.minutes_left + ' мин</div>' +
+                    '</div>' +
+                    '</div>' +
+                    '</div>';
+            }
+        } else {
+            activeDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Нет активных бустеров</div>';
+        }
+        const shopDiv = document.getElementById('shopBoostersList');
+        shopDiv.innerHTML = '<h4 style="color: #ffd700; margin-bottom: 10px;">💎 ДОСТУПНЫЕ БУСТЕРЫ:</h4>';
+        for (const b of data.shop_boosters) {
+            let priceText = b.price_clicks > 0 ? b.price_clicks + ' кликов' : b.price_gems + ' алмазов';
+            shopDiv.innerHTML += '<div class="booster-item">' +
+                '<div class="booster-info">' +
+                '<span class="booster-emoji">' + b.emoji + '</span>' +
+                '<div>' +
+                '<div class="booster-name">' + b.name + '</div>' +
+                '<div class="booster-price">' + b.description + ' | Цена: ' + priceText + '</div>' +
+                '</div>' +
+                '</div>' +
+                '<button class="booster-btn" onclick="buyBooster(' + b.id + ')">💎 КУПИТЬ</button>' +
+                '</div>';
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function loadAchievements() {
+    try {
+        const res = await fetch('/api/get_achievements?user_id=' + userId);
+        const data = await res.json();
+        const achievementsList = document.getElementById('achievementsList');
+        achievementsList.innerHTML = '';
+        for (const ach of data.achievements) {
+            const div = document.createElement('div');
+            div.className = 'achievement-item';
+            let emoji = ach.completed ? '🏆' : '🔒';
+            let statusText = ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>';
+            div.innerHTML = '<div class="achievement-info">' +
+                '<span class="achievement-emoji">' + emoji + '</span>' +
+                '<div>' +
+                '<div class="achievement-name">' + ach.name + '</div>' +
+                '<div class="achievement-desc">' + ach.description + ' (' + ach.condition + ')</div>' +
+                '<div class="achievement-desc">🎁 Награда: +' + ach.reward_gems + '💎 +' + ach.reward_clicks + '💰</div>' +
+                '</div>' +
+                '</div>' +
+                statusText;
+            achievementsList.appendChild(div);
+        }
+    } catch(e) { console.error(e); }
+}
+
+console.log('Все функции загружены! Теперь нажми на кнопки магазина, кейсов, бустеров, достижений');
     </script>
 </body>
 </html>'''
