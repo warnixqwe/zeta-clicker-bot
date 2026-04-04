@@ -22,9 +22,37 @@ def init_db():
             clicks INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
             energy INTEGER DEFAULT 1000,
-            tap_power INTEGER DEFAULT 1
+            tap_power INTEGER DEFAULT 1,
+            current_skin TEXT DEFAULT '🦆'
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS skins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            emoji TEXT,
+            price_clicks INTEGER,
+            tap_bonus INTEGER DEFAULT 0
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_skins (
+            user_id INTEGER,
+            skin_id INTEGER,
+            PRIMARY KEY (user_id, skin_id)
+        )
+    """)
+    conn.commit()
+    
+    cursor.execute("SELECT COUNT(*) FROM skins")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES (?, ?, ?, ?)", [
+            ('Обычная утка', '🦆', 0, 0),
+            ('Золотая утка', '🌟', 5000, 2),
+            ('Киберутка', '🤖', 15000, 5),
+            ('Утка-призрак', '👻', 30000, 10),
+            ('Дьявольская утка', '😈', 50000, 15),
+        ])
     conn.commit()
     conn.close()
 
@@ -33,19 +61,19 @@ init_db()
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, energy, tap_power FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, energy, tap_power, current_skin FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
-        return {"clicks": result[0], "level": result[1], "energy": result[2], "tap_power": result[3]}
+        return {"clicks": result[0], "level": result[1], "energy": result[2], "tap_power": result[3], "skin": result[4]}
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power) VALUES (?, ?, ?, ?, ?)",
-                       (user_id, 0, 1, 1000, 1))
+        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, current_skin) VALUES (?, ?, ?, ?, ?, ?)",
+                       (user_id, 0, 1, 1000, 1, "🦆"))
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1}
+        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "skin": "🦆"}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -83,6 +111,55 @@ async def upgrade_tap(user_id: int):
         return {"success": True, "new_tap_power": new_tap_power}
     return {"success": False, "need": price}
 
+@app.post("/api/buy_skin")
+async def buy_skin(user_id: int, skin_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, emoji, price_clicks FROM skins WHERE id = ?", (skin_id,))
+    skin = cursor.fetchone()
+    if not skin:
+        conn.close()
+        return {"success": False, "message": "Скин не найден"}
+    skin_name, skin_emoji, price = skin
+    stats = get_user_stats(user_id)
+    if stats["clicks"] >= price:
+        new_clicks = stats["clicks"] - price
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "skin_name": skin_name, "skin_emoji": skin_emoji}
+    conn.close()
+    return {"success": False, "need": price}
+
+@app.post("/api/equip_skin")
+async def equip_skin(user_id: int, skin_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
+    if not cursor.fetchone():
+        conn.close()
+        return {"success": False, "message": "Скин не куплен"}
+    cursor.execute("SELECT emoji FROM skins WHERE id = ?", (skin_id,))
+    emoji = cursor.fetchone()[0]
+    cursor.execute("UPDATE users SET current_skin = ? WHERE user_id = ?", (emoji, user_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "skin": emoji}
+
+@app.get("/api/get_skins")
+async def get_skins(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
+    owned = [row[0] for row in cursor.fetchall()]
+    cursor.execute("SELECT current_skin FROM users WHERE user_id = ?", (user_id,))
+    current = cursor.fetchone()[0]
+    cursor.execute("SELECT id, name, emoji, price_clicks, tap_bonus FROM skins")
+    skins = cursor.fetchall()
+    conn.close()
+    return {"skins": [{"id": s[0], "name": s[1], "emoji": s[2], "price": s[3], "bonus": s[4], "owned": s[0] in owned, "equipped": s[2] == current} for s in skins]}
+
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
     return get_user_stats(user_id)
@@ -106,6 +183,8 @@ async def mini_app(user_id: int = 1):
         * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; }}
         body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
         .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; padding: 20px; }}
+        .screen {{ display: none; }}
+        .screen.active {{ display: block; }}
         .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
         .stat-row:last-child {{ border-bottom: none; }}
@@ -115,6 +194,14 @@ async def mini_app(user_id: int = 1):
         .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; }}
         .duck:active {{ transform: scale(0.94); }}
         .btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 20px; }}
+        .back-btn {{ background: rgba(255,255,255,0.1); }}
+        .skin-list {{ margin: 20px 0; }}
+        .skin-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji {{ font-size: 40px; }}
+        .skin-name {{ font-size: 16px; font-weight: bold; }}
+        .skin-price {{ font-size: 12px; color: #ffd700; }}
+        .skin-buy-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
         .energy-bar {{ width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin: 10px 0; overflow: hidden; }}
         .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 6px; transition: width 0.2s; }}
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
@@ -123,15 +210,26 @@ async def mini_app(user_id: int = 1):
 </head>
 <body>
     <div class="container">
-        <div class="stats">
-            <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
-            <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
-            <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
-            <div class="stat-row"><span class="stat-label">⚡ Энергия</span><span class="stat-value" id="energyValue">{stats["energy"]}/1000</span></div>
+        <!-- Главный экран -->
+        <div id="mainScreen" class="screen active">
+            <div class="stats">
+                <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
+                <div class="stat-row"><span class="stat-label">⚡ Энергия</span><span class="stat-value" id="energyValue">{stats["energy"]}/1000</span></div>
+            </div>
+            <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
+            <div class="duck-container"><div class="duck" id="duck">🦆</div></div>
+            <button class="btn" id="upgradeBtn">💪 Улучшить тап</button>
+            <button class="btn" id="openShopBtn">👕 Магазин скинов</button>
         </div>
-        <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
-        <div class="duck-container"><div class="duck" id="duck">🦆</div></div>
-        <button class="btn" id="upgradeBtn">💪 Улучшить тап</button>
+        
+        <!-- Магазин -->
+        <div id="shopScreen" class="screen">
+            <h3 style="color: white; text-align: center;">👕 МАГАЗИН СКИНОВ</h3>
+            <div id="skinsList" class="skin-list">Загрузка...</div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
     </div>
 
     <script>
@@ -145,6 +243,14 @@ async def mini_app(user_id: int = 1):
         let tapPower = {stats["tap_power"]};
         let energy = {stats["energy"]};
         let maxEnergy = 1000;
+        let currentSkin = "{stats["skin"]}";
+        
+        function showScreen(screenName) {{
+            document.getElementById('mainScreen').classList.remove('active');
+            document.getElementById('shopScreen').classList.remove('active');
+            document.getElementById(screenName).classList.add('active');
+            if (screenName === 'shopScreen') loadSkins();
+        }}
         
         function updateUI() {{
             document.getElementById('clicksValue').innerText = clicks;
@@ -162,8 +268,67 @@ async def mini_app(user_id: int = 1):
                 level = data.level;
                 tapPower = data.tap_power;
                 energy = data.energy;
+                currentSkin = data.skin;
                 updateUI();
+                document.getElementById('duck').innerText = currentSkin;
             }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function loadSkins() {{
+            try {{
+                const res = await fetch('/api/get_skins?user_id=' + userId);
+                const data = await res.json();
+                const skinsList = document.getElementById('skinsList');
+                skinsList.innerHTML = '';
+                for (const skin of data.skins) {{
+                    const div = document.createElement('div');
+                    div.className = 'skin-item';
+                    if (skin.owned && skin.equipped) {{
+                        div.innerHTML = 
+                            '<div class="skin-info">' +
+                                '<span class="skin-emoji">' + skin.emoji + '</span>' +
+                                '<div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе (ЭКИПИРОВАН)</div></div>' +
+                            '</div>';
+                    }} else if (skin.owned) {{
+                        div.innerHTML = 
+                            '<div class="skin-info">' +
+                                '<span class="skin-emoji">' + skin.emoji + '</span>' +
+                                '<div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе (КУПЛЕН)</div></div>' +
+                            '</div>' +
+                            '<button class="skin-buy-btn" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
+                    }} else {{
+                        div.innerHTML = 
+                            '<div class="skin-info">' +
+                                '<span class="skin-emoji">' + skin.emoji + '</span>' +
+                                '<div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе | Цена: ' + skin.price + ' кликов</div></div>' +
+                            '</div>' +
+                            '<button class="skin-buy-btn" onclick="buySkin(' + skin.id + ')">💎 КУПИТЬ</button>';
+                    }}
+                    skinsList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function buySkin(skinId) {{
+            const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Покупка успешна!', message: 'Вы купили ' + data.skin_name + ' ' + data.skin_emoji, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+                await loadSkins();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + data.need + ' кликов', buttons: [{{type: 'ok'}}]}});
+            }}
+        }}
+        
+        async function equipSkin(skinId) {{
+            const res = await fetch('/api/equip_skin?user_id=' + userId + '&skin_id=' + skinId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Скин экипирован!', message: 'Теперь ваша утка: ' + data.skin, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+                await loadSkins();
+            }}
         }}
         
         async function sendClick() {{
@@ -219,6 +384,8 @@ async def mini_app(user_id: int = 1):
                 tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + price + ' кликов', buttons: [{{type: 'ok'}}]}});
             }}
         }};
+        
+        document.getElementById('openShopBtn').onclick = () => showScreen('shopScreen');
         
         setInterval(() => {{
             if (energy < maxEnergy) {{
