@@ -1012,6 +1012,11 @@ async def mini_app(user_id: int = 1):
                 updateUI();
             }}
         }}, 1000);
+        window.loadSkins = loadSkins;
+        window.loadCases = loadCases;
+        window.loadBoosters = loadBoosters;
+        window.loadAchievements = loadAchievements;
+        window.loadReferralData = loadReferralData;
     </script>
 </body>
 </html>'''
