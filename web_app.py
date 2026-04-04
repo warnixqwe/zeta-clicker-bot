@@ -910,18 +910,14 @@ async def mini_app(user_id: int = 1):
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let clicks = {stats["clicks"]};
-        let level = {stats["level"]};
-        let tapPower = {stats["tap_power"]};
-        let passiveIncome = {stats["passive_income"]};
-        let currentSkin = "{stats["skin"]}";
-        let gems = {stats["gems"]};
-        let energy = {stats["energy"]};
+        let clicks = parseInt('{stats["clicks"]}');
+        let level = parseInt('{stats["level"]}');
+        let tapPower = parseInt('{stats["tap_power"]}');
+        let passiveIncome = parseInt('{stats["passive_income"]}');
+        let currentSkin = '{stats["skin"]}';
+        let gems = parseInt('{stats["gems"]}');
+        let energy = parseInt('{stats["energy"]}');
         let maxEnergy = 1000;
         
         function showScreen(screenName) {{
