@@ -539,6 +539,28 @@ async def mini_app(user_id: int = 1):
     
     html = f'''<!DOCTYPE html>
 <html>
+<script>
+    // Проверка окружения
+    window.onload = function() {
+        const isTelegramWebView = !!(window.Telegram && window.Telegram.WebApp);
+        const userAgent = navigator.userAgent;
+        
+        console.log('Is Telegram WebView:', isTelegramWebView);
+        console.log('UserAgent:', userAgent);
+        
+        if (!isTelegramWebView) {
+            document.body.innerHTML = '<div style="padding:20px;text-align:center;font-family:sans-serif;">' +
+                '<h2>⚠️ Открывай в Telegram</h2>' +
+                '<p>Это приложение работает только внутри Telegram.</p>' +
+                '<p>Нажми на три точки → "Открыть в браузере"</p>' +
+                '</div>';
+        } else {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+        }
+    };
+</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
