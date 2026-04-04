@@ -828,6 +828,9 @@ async def mini_app(user_id: int = 1):
     </style>
 </head>
 <body>
+    <script>
+        window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = { isDisabled: true };
+    </script>
     <div class="container">
         <div id="mainScreen" class="screen active">
             <div class="stats">
@@ -910,8 +913,6 @@ async def mini_app(user_id: int = 1):
     </div>
 
     <script>
-        // Отключаем React hydration warning
-    window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = { isDisabled: true };
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
