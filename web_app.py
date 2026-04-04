@@ -753,7 +753,7 @@ async def get_cases(user_id: int):
     return {"cases": [{"id": c[0], "name": c[1], "emoji": c[2], "price_gems": c[3], "price_clicks": c[4]} for c in cases]}
 
 @app.get("/api/get_boosters")
-async def get_boosters_list(user)
+async def get_boosters_list(user_id: int):
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = get_user_stats(user_id)
