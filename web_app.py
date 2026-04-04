@@ -19,7 +19,6 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Таблица пользователей (со всеми колонками, включая gems)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -38,17 +37,6 @@ def init_db():
         )
     """)
     
-    # Добавляем колонки, если их нет (для старых БД)
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN gems INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN total_gems INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    
-    # Остальные таблицы
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             referrer_id INTEGER,
@@ -148,7 +136,6 @@ def init_db():
     
     conn.commit()
     
-    # Добавляем начальные данные
     cursor.execute("SELECT COUNT(*) FROM skins")
     if cursor.fetchone()[0] == 0:
         default_skins = [
@@ -230,10 +217,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Вызов инициализации БД при старте
 init_db()
-
-# ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С БД ====================
 
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
@@ -244,15 +228,15 @@ def get_user_stats(user_id: int):
     
     if result:
         return {
-            "clicks": int(result[0]),
-            "level": int(result[1]),
-            "energy": int(result[2]),
-            "tap_power": int(result[3]),
-            "passive_income": int(result[4]),
-            "skin": str(result[5]) if result[5] else "🦆",
-            "total_clicks": int(result[6]),
-            "daily_streak": int(result[7]),
-            "gems": int(result[8])
+            "clicks": result[0],
+            "level": result[1],
+            "energy": result[2],
+            "tap_power": result[3],
+            "passive_income": result[4],
+            "skin": result[5] if result[5] else "🦆",
+            "total_clicks": result[6],
+            "daily_streak": result[7],
+            "gems": result[8]
         }
     else:
         conn = sqlite3.connect(DB_PATH)
@@ -293,89 +277,6 @@ def add_gems(user_id: int, amount: int):
         conn.commit()
     conn.close()
 
-def check_achievements(user_id: int, condition_type: str, current_value: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, condition_type, condition_value, reward_gems, reward_clicks, reward_skin_id FROM achievements WHERE condition_type = ?", (condition_type,))
-    achievements = cursor.fetchall()
-    
-    for ach in achievements:
-        ach_id, ach_type, ach_value, reward_gems, reward_clicks, reward_skin = ach
-        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
-        result = cursor.fetchone()
-        if not result or result[0] == 0:
-            if current_value >= ach_value:
-                cursor.execute("INSERT OR REPLACE INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES (?, ?, ?, ?, ?)",
-                               (user_id, ach_id, ach_value, 1, datetime.now().isoformat()))
-                if reward_gems > 0:
-                    add_gems(user_id, reward_gems)
-                if reward_clicks > 0:
-                    cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
-                    clicks = cursor.fetchone()[0]
-                    cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (clicks + reward_clicks, user_id))
-                if reward_skin:
-                    cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_skin))
-    conn.commit()
-    conn.close()
-
-def open_case(user_id: int, case_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, emoji, price_gems, price_clicks FROM cases WHERE id = ?", (case_id,))
-    case_name, case_emoji, price_gems, price_clicks = cursor.fetchone()
-    
-    cursor.execute("SELECT clicks, gems FROM users WHERE user_id = ?", (user_id,))
-    clicks, gems = cursor.fetchone()
-    
-    if price_clicks > 0 and clicks >= price_clicks:
-        new_clicks = clicks - price_clicks
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-    elif price_gems > 0 and gems >= price_gems:
-        new_gems = gems - price_gems
-        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (new_gems, user_id))
-    else:
-        conn.close()
-        return {"success": False, "message": "Не хватает ресурсов"}
-    
-    cursor.execute("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = ?", (case_id,))
-    rewards = cursor.fetchall()
-    
-    total_chance = sum(r[3] for r in rewards)
-    rand = random.randint(1, total_chance)
-    cumulative = 0
-    selected = None
-    for reward in rewards:
-        cumulative += reward[3]
-        if rand <= cumulative:
-            selected = reward
-            break
-    
-    reward_type, reward_value, reward_text, chance = selected
-    result = {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
-    
-    if reward_type == "clicks":
-        cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
-        current_clicks = cursor.fetchone()[0]
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (current_clicks + reward_value, user_id))
-        result["reward"] = f"{reward_value} кликов"
-    elif reward_type == "gems":
-        cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
-        current_gems = cursor.fetchone()[0]
-        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (current_gems + reward_value, user_id))
-        result["reward"] = f"{reward_value} алмазов"
-    elif reward_type == "booster":
-        expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60)
-        cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)", 
-                       (user_id, reward_value, expires_at.isoformat()))
-        result["reward"] = reward_text
-    elif reward_type == "skin":
-        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
-        result["reward"] = reward_text
-    
-    conn.commit()
-    conn.close()
-    return result
-
 def get_active_boosters(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -399,34 +300,6 @@ def get_booster_multiplier(user_id: int):
         if b["effect_type"] == "tap_multiplier":
             multiplier *= b["effect_value"]
     return multiplier
-
-def get_achievements(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
-    all_achievements = cursor.fetchall()
-    
-    result = []
-    for ach in all_achievements:
-        ach_id, name, desc, condition, reward_gems, reward_clicks = ach
-        cursor.execute("SELECT completed, completed_at FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
-        progress_data = cursor.fetchone()
-        completed = progress_data[0] if progress_data else 0
-        completed_at = progress_data[1] if progress_data else None
-        result.append({
-            "id": ach_id,
-            "name": name,
-            "description": desc,
-            "condition": condition,
-            "reward_gems": reward_gems,
-            "reward_clicks": reward_clicks,
-            "completed": completed,
-            "completed_at": completed_at
-        })
-    conn.close()
-    return result
-
-# ==================== API ЭНДПОИНТЫ ====================
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
@@ -657,7 +530,54 @@ async def claim_referral(user_id: int):
 
 @app.post("/api/open_case")
 async def open_case_api(user_id: int, case_id: int = 1):
-    result = open_case(user_id, case_id)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, emoji, price_gems, price_clicks FROM cases WHERE id = ?", (case_id,))
+    case = cursor.fetchone()
+    if not case:
+        conn.close()
+        return {"success": False, "message": "Кейс не найден"}
+    
+    case_name, case_emoji, price_gems, price_clicks = case
+    
+    cursor.execute("SELECT clicks, gems FROM users WHERE user_id = ?", (user_id,))
+    clicks, gems = cursor.fetchone()
+    
+    if price_clicks > 0 and clicks >= price_clicks:
+        new_clicks = clicks - price_clicks
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+    elif price_gems > 0 and gems >= price_gems:
+        new_gems = gems - price_gems
+        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (new_gems, user_id))
+    else:
+        conn.close()
+        return {"success": False, "message": "Не хватает ресурсов"}
+    
+    cursor.execute("SELECT reward_type, reward_value, reward_text FROM case_rewards WHERE case_id = ? ORDER BY RANDOM() LIMIT 1", (case_id,))
+    reward_type, reward_value, reward_text = cursor.fetchone()
+    result = {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
+    
+    if reward_type == "clicks":
+        cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+        current_clicks = cursor.fetchone()[0]
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (current_clicks + reward_value, user_id))
+        result["reward"] = f"{reward_value} кликов"
+    elif reward_type == "gems":
+        cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
+        current_gems = cursor.fetchone()[0]
+        cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (current_gems + reward_value, user_id))
+        result["reward"] = f"{reward_value} алмазов"
+    elif reward_type == "booster":
+        expires_at = datetime.now() + timedelta(minutes=30)
+        cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)", 
+                       (user_id, reward_value, expires_at.isoformat()))
+        result["reward"] = reward_text
+    elif reward_type == "skin":
+        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
+        result["reward"] = reward_text
+    
+    conn.commit()
+    conn.close()
     return result
 
 @app.get("/api/get_cases")
@@ -733,8 +653,27 @@ async def buy_booster(user_id: int, booster_id: int, payment: str = "clicks"):
 
 @app.get("/api/get_achievements")
 async def get_achievements_list(user_id: int):
-    achievements = get_achievements(user_id)
-    return {"achievements": achievements}
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
+    achievements = cursor.fetchall()
+    
+    result = []
+    for ach in achievements:
+        ach_id, name, desc, condition, reward_gems, reward_clicks = ach
+        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
+        completed = cursor.fetchone()
+        result.append({
+            "id": ach_id,
+            "name": name,
+            "description": desc,
+            "condition": condition,
+            "reward_gems": reward_gems,
+            "reward_clicks": reward_clicks,
+            "completed": completed[0] if completed else 0
+        })
+    conn.close()
+    return {"achievements": result}
 
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
@@ -773,8 +712,6 @@ async def handle_click(data: ClickData):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-# ==================== HTML (упрощённая версия без турниров) ====================
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
@@ -838,7 +775,7 @@ async def mini_app(user_id: int = 1):
                 <div class="stat-row"><span class="stat-label">💎 Алмазы</span><span class="stat-value" id="gemsValue">{stats["gems"]}</span></div>
             </div>
             <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
-            <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
+            <div class="duck-container"><div class="duck" id="duck">🦆</div></div>
             <div class="button-grid">
                 <button class="action-btn" id="upgradeTapBtn">💪 Улучшить тап</button>
                 <button class="action-btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
@@ -910,14 +847,18 @@ async def mini_app(user_id: int = 1):
     </div>
 
     <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let clicks = parseInt('{stats["clicks"]}');
-        let level = parseInt('{stats["level"]}');
-        let tapPower = parseInt('{stats["tap_power"]}');
-        let passiveIncome = parseInt('{stats["passive_income"]}');
-        let currentSkin = '{stats["skin"]}';
-        let gems = parseInt('{stats["gems"]}');
-        let energy = parseInt('{stats["energy"]}');
+        let clicks = {stats["clicks"]};
+        let level = {stats["level"]};
+        let tapPower = {stats["tap_power"]};
+        let passiveIncome = {stats["passive_income"]};
+        let currentSkin = "{stats["skin"]}";
+        let gems = {stats["gems"]};
+        let energy = {stats["energy"]};
         let maxEnergy = 1000;
         
         function showScreen(screenName) {{
@@ -933,20 +874,20 @@ async def mini_app(user_id: int = 1):
         }}
         
         function updateUI() {{
-            document.getElementById('clicksValue').textContent = clicks;
-            document.getElementById('levelValue').textContent = level;
-            document.getElementById('tapPowerValue').textContent = '+' + tapPower;
-            document.getElementById('passiveValue').textContent = passiveIncome + '/час';
-            document.getElementById('gemsValue').textContent = gems;
+            document.getElementById('clicksValue').innerText = clicks;
+            document.getElementById('levelValue').innerText = level;
+            document.getElementById('tapPowerValue').innerText = '+' + tapPower;
+            document.getElementById('passiveValue').innerText = passiveIncome + '/час';
+            document.getElementById('gemsValue').innerText = gems;
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
             
-            if (document.getElementById('profileLevel')) document.getElementById('profileLevel').textContent = level;
-            if (document.getElementById('profileTapPower')) document.getElementById('profileTapPower').textContent = '+' + tapPower;
-            if (document.getElementById('profilePassive')) document.getElementById('profilePassive').textContent = passiveIncome + '/час';
-            if (document.getElementById('profileSkin')) document.getElementById('profileSkin').textContent = currentSkin;
-            if (document.getElementById('profileGems')) document.getElementById('profileGems').textContent = gems;
-            if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').textContent = '{stats["total_clicks"]}';
-            if (document.getElementById('profileStreak')) document.getElementById('profileStreak').textContent = '{stats["daily_streak"]}';
+            if (document.getElementById('profileLevel')) document.getElementById('profileLevel').innerText = level;
+            if (document.getElementById('profileTapPower')) document.getElementById('profileTapPower').innerText = '+' + tapPower;
+            if (document.getElementById('profilePassive')) document.getElementById('profilePassive').innerText = passiveIncome + '/час';
+            if (document.getElementById('profileSkin')) document.getElementById('profileSkin').innerText = currentSkin;
+            if (document.getElementById('profileGems')) document.getElementById('profileGems').innerText = gems;
+            if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').innerText = '{stats["total_clicks"]}';
+            if (document.getElementById('profileStreak')) document.getElementById('profileStreak').innerText = '{stats["daily_streak"]}';
         }}
         
         async function loadStats() {{
@@ -961,7 +902,7 @@ async def mini_app(user_id: int = 1):
                 gems = data.gems;
                 energy = data.energy;
                 updateUI();
-                document.getElementById('duck').textContent = currentSkin;
+                document.getElementById('duck').innerText = currentSkin;
             }} catch(e) {{ console.error(e); }}
         }}
         
@@ -1155,12 +1096,12 @@ async def mini_app(user_id: int = 1):
             try {{
                 const res = await fetch('/api/get_referrals?user_id=' + userId);
                 const data = await res.json();
-                document.getElementById('referralCount').textContent = data.count;
-                document.getElementById('unclaimedRewards').textContent = data.unclaimed;
+                document.getElementById('referralCount').innerText = data.count;
+                document.getElementById('unclaimedRewards').innerText = data.unclaimed;
                 
                 const botUsername = tg.initDataUnsafe?.user?.username || 'ZetaClickerRobot';
                 const referralLink = 'https://t.me/' + botUsername + '?start=ref_' + userId;
-                document.getElementById('referralLink').textContent = referralLink;
+                document.getElementById('referralLink').innerText = referralLink;
                 
                 document.getElementById('copyReferralBtn').onclick = () => {{
                     navigator.clipboard.writeText(referralLink);
