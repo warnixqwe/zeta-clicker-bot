@@ -1033,7 +1033,7 @@ async def mini_app(user_id: int = 1):
                 await loadStats();
                 await loadSkins();
             }} else {{
-                tg.showPopup({{title: '❌ Не хватает ресурсов', message: `Нужно: ${{data.need}} ${'{' + (data.type === 'clicks' ? 'кликов' : 'алмазов') + '}'}`, buttons: [{{type: 'ok'}}]}});
+                tg.showPopup({title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + (data.type === 'clicks' ? 'кликов' : 'алмазов'), buttons: [{type: 'ok'}]});
             }}
         }}
         
