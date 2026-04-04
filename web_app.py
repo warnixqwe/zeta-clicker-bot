@@ -1,16 +1,13 @@
 import os
 import sqlite3
 import random
-import asyncio
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
 
 class ClickData(BaseModel):
     user_id: int
@@ -24,7 +21,6 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Основная таблица пользователей (расширенная)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -43,7 +39,6 @@ def init_db():
         )
     """)
     
-    # Таблица рефералов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             referrer_id INTEGER,
@@ -53,7 +48,6 @@ def init_db():
         )
     """)
     
-    # Таблица скинов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS skins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +60,6 @@ def init_db():
         )
     """)
     
-    # Купленные скины
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_skins (
             user_id INTEGER,
@@ -75,7 +68,6 @@ def init_db():
         )
     """)
     
-    # Достижения
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS achievements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +81,6 @@ def init_db():
         )
     """)
     
-    # Прогресс достижений
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_achievements (
             user_id INTEGER,
@@ -101,7 +92,6 @@ def init_db():
         )
     """)
     
-    # Кейсы
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,7 +102,6 @@ def init_db():
         )
     """)
     
-    # Награды из кейсов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS case_rewards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,7 +113,6 @@ def init_db():
         )
     """)
     
-    # Бустеры
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS boosters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,7 +127,6 @@ def init_db():
         )
     """)
     
-    # Активные бустеры
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_boosters (
             user_id INTEGER,
@@ -149,7 +136,6 @@ def init_db():
         )
     """)
     
-    # Турниры
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tournaments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,7 +149,6 @@ def init_db():
         )
     """)
     
-    # Участники турниров
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tournament_participants (
             user_id INTEGER,
@@ -177,7 +162,6 @@ def init_db():
     
     conn.commit()
     
-    # Добавляем скины
     cursor.execute("SELECT COUNT(*) FROM skins")
     if cursor.fetchone()[0] == 0:
         default_skins = [
@@ -193,28 +177,22 @@ def init_db():
             default_skins
         )
     
-    # Добавляем достижения
     cursor.execute("SELECT COUNT(*) FROM achievements")
     if cursor.fetchone()[0] == 0:
         achievements = [
             ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500, None),
             ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000, None),
             ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000, None),
-            ("Легенда", "Накликать 100000 кликов", "clicks", 100000, 10, 50000, None),
             ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500, None),
             ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000, None),
             ("Реферал", "Пригласить 1 друга", "referrals", 1, 1, 1000, None),
             ("Популярный", "Пригласить 5 друзей", "referrals", 5, 5, 5000, None),
-            ("Мастер рефералов", "Пригласить 20 друзей", "referrals", 20, 20, 20000, None),
-            ("Улучшатель", "Улучшить силу тапа до 10", "tap_power", 10, 2, 2000, None),
-            ("Гуру", "Улучшить силу тапа до 50", "tap_power", 50, 5, 10000, None),
         ]
         cursor.executemany(
             "INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks, reward_skin_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
             achievements
         )
     
-    # Добавляем кейсы
     cursor.execute("SELECT COUNT(*) FROM cases")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO cases (name, emoji, price_gems, price_clicks) VALUES (?, ?, ?, ?)", ("Обычный кейс", "📦", 0, 1000))
@@ -226,7 +204,6 @@ def init_db():
             (case_id, "clicks", 5000, "5000 кликов", 5),
             (case_id, "gems", 1, "1 алмаз 💎", 15),
             (case_id, "gems", 5, "5 алмазов 💎", 8),
-            (case_id, "gems", 10, "10 алмазов 💎", 3),
             (case_id, "booster", 1, "x2 клика (30 мин)", 5),
             (case_id, "skin", 2, "Золотая утка 🌟", 2),
         ]
@@ -240,20 +217,16 @@ def init_db():
         rewards = [
             (case_id, "clicks", 5000, "5000 кликов", 25),
             (case_id, "clicks", 10000, "10000 кликов", 20),
-            (case_id, "clicks", 25000, "25000 кликов", 15),
             (case_id, "gems", 5, "5 алмазов 💎", 15),
             (case_id, "gems", 10, "10 алмазов 💎", 10),
-            (case_id, "gems", 25, "25 алмазов 💎", 5),
             (case_id, "booster", 2, "x2 клика (1 час)", 5),
             (case_id, "skin", 3, "Киберутка 🤖", 3),
-            (case_id, "skin", 4, "Утка-призрак 👻", 2),
         ]
         cursor.executemany(
             "INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)",
             rewards
         )
     
-    # Добавляем бустеры
     cursor.execute("SELECT COUNT(*) FROM boosters")
     if cursor.fetchone()[0] == 0:
         boosters = [
@@ -272,7 +245,7 @@ def init_db():
 
 init_db()
 
-# ==================== ФУНКЦИИ ДЛЯ НОВЫХ ФИЧ ====================
+# ==================== ФУНКЦИИ ====================
 
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
@@ -317,10 +290,6 @@ def update_clicks(user_id: int, increment: int):
         cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ?, energy = ? WHERE user_id = ?", 
                        (new_clicks, new_total, new_level, new_energy, user_id))
         conn.commit()
-        
-        # Проверка достижений
-        check_achievements(user_id, "clicks", new_total)
-        check_achievements(user_id, "tap_power", result[2])
     conn.close()
     return True
 
@@ -380,7 +349,6 @@ def open_case(user_id: int, case_id: int):
         conn.close()
         return {"success": False, "message": "Не хватает ресурсов"}
     
-    # Выбор награды с учётом шансов
     cursor.execute("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = ?", (case_id,))
     rewards = cursor.fetchall()
     
@@ -470,35 +438,6 @@ def get_achievements(user_id: int):
     conn.close()
     return result
 
-def get_tournaments(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    now = datetime.now().isoformat()
-    
-    # Активные турниры
-    cursor.execute("SELECT id, name, description, end_date, reward_gems, reward_clicks FROM tournaments WHERE start_date <= ? AND end_date >= ?", (now, now))
-    active = cursor.fetchall()
-    
-    # Текущий рейтинг
-    tournaments_data = []
-    for t in active:
-        t_id, name, desc, end_date, reward_gems, reward_clicks = t
-        cursor.execute("SELECT user_id, score FROM tournament_participants WHERE tournament_id = ? ORDER BY score DESC LIMIT 10", (t_id,))
-        leaders = cursor.fetchall()
-        cursor.execute("SELECT score FROM tournament_participants WHERE tournament_id = ? AND user_id = ?", (t_id, user_id))
-        my_score = cursor.fetchone()
-        tournaments_data.append({
-            "id": t_id,
-            "name": name,
-            "description": desc,
-            "end_date": end_date,
-            "reward_gems": reward_gems,
-            "reward_clicks": reward_clicks,
-            "leaders": [{"user_id": l[0], "score": l[1]} for l in leaders],
-            "my_score": my_score[0] if my_score else 0
-        })
-    conn.close()
-    return tournaments_data
 # ==================== API ЭНДПОИНТЫ ====================
 
 @app.post("/api/upgrade_tap")
@@ -520,7 +459,6 @@ async def upgrade_tap(user_id: int):
         cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
         conn.commit()
         conn.close()
-        check_achievements(user_id, "tap_power", new_tap_power)
         return {"success": True, "new_tap_power": new_tap_power, "new_clicks": new_clicks}
     else:
         conn.close()
@@ -598,7 +536,6 @@ async def claim_daily(user_id: int):
     bonus = min(100 + daily_streak * 50, 600)
     new_clicks = clicks + bonus
     
-    # Бонусные алмазы за серию
     gem_bonus = 0
     if daily_streak == 7:
         gem_bonus = 5
@@ -650,11 +587,9 @@ async def buy_skin(user_id: int, skin_id: int, payment: str = "clicks"):
     cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
     conn.commit()
     
-    # Проверка достижения за покупку скинов
     cursor.execute("SELECT COUNT(*) FROM user_skins WHERE user_id = ?", (user_id,))
     skins_count = cursor.fetchone()[0]
     conn.close()
-    check_achievements(user_id, "skins", skins_count)
     
     return {"success": True, "skin_name": skin_name, "skin_emoji": skin_emoji}
 
@@ -712,9 +647,6 @@ async def get_referrals(user_id: int):
     cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND reward_claimed = 0", (user_id,))
     unclaimed = cursor.fetchone()[0]
     conn.close()
-    
-    check_achievements(user_id, "referrals", count)
-    
     return {"count": count, "unclaimed": unclaimed}
 
 @app.post("/api/claim_referral")
@@ -764,6 +696,101 @@ async def get_boosters_list(user_id: int):
     
     return {"shop_boosters": [{"id": b[0], "name": b[1], "emoji": b[2], "description": b[3], "price_gems": b[4], "price_clicks": b[5]} for b in shop_boosters],
             "active_boosters": active}
+
+@app.post("/api/buy_booster")
+async def buy_booster(user_id: int, booster_id: int, payment: str = "clicks"):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, emoji, price_gems, price_clicks, duration_minutes, effect_type, effect_value FROM boosters WHERE id = ?", (booster_id,))
+    booster = cursor.fetchone()
+    if not booster:
+        conn.close()
+        return {"success": False, "message": "Бустер не найден"}
+    
+    booster_name, booster_emoji, price_gems, price_clicks, duration, effect_type, effect_value = booster
+    
+    if payment == "clicks" and price_clicks > 0:
+        cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+        clicks = cursor.fetchone()[0]
+        if clicks >= price_clicks:
+            new_clicks = clicks - price_clicks
+            cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        else:
+            conn.close()
+            return {"success": False, "need": price_clicks, "type": "clicks"}
+    elif payment == "gems" and price_gems > 0:
+        cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
+        gems = cursor.fetchone()[0]
+        if gems >= price_gems:
+            new_gems = gems - price_gems
+            cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (new_gems, user_id))
+        else:
+            conn.close()
+            return {"success": False, "need": price_gems, "type": "gems"}
+    else:
+        conn.close()
+        return {"success": False, "message": "Способ оплаты недоступен"}
+    
+    expires_at = datetime.now() + timedelta(minutes=duration)
+    cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)", 
+                   (user_id, booster_id, expires_at.isoformat()))
+    
+    if effect_type == "energy":
+        cursor.execute("SELECT energy FROM users WHERE user_id = ?", (user_id,))
+        current_energy = cursor.fetchone()[0]
+        new_energy = min(current_energy + int(effect_value), 1000)
+        cursor.execute("UPDATE users SET energy = ? WHERE user_id = ?", (new_energy, user_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return {"success": True, "booster_name": booster_name, "booster_emoji": booster_emoji}
+
+@app.get("/api/get_achievements")
+async def get_achievements_list(user_id: int):
+    achievements = get_achievements(user_id)
+    return {"achievements": achievements}
+
+@app.get("/api/get_stats")
+async def get_stats(user_id: int):
+    stats = get_user_stats(user_id)
+    boosters = get_active_boosters(user_id)
+    tap_multiplier = get_booster_multiplier(user_id)
+    return {
+        "clicks": stats["clicks"],
+        "level": stats["level"],
+        "energy": stats["energy"],
+        "tap_power": stats["tap_power"],
+        "passive_income": stats["passive_income"],
+        "skin": stats["skin"],
+        "total_clicks": stats["total_clicks"],
+        "daily_streak": stats["daily_streak"],
+        "gems": stats["gems"],
+        "boosters": boosters,
+        "tap_multiplier": tap_multiplier
+    }
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    multiplier = get_booster_multiplier(data.user_id)
+    final_clicks = int(data.clicks * multiplier)
+    update_clicks(data.user_id, final_clicks)
+    stats = get_user_stats(data.user_id)
+    return {
+        "clicks": stats["clicks"],
+        "level": stats["level"],
+        "energy": stats["energy"],
+        "tap_power": stats["tap_power"],
+        "passive_income": stats["passive_income"],
+        "gems": stats["gems"]
+    }
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+# ==================== HTML ====================
+
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = get_user_stats(user_id)
@@ -779,26 +806,21 @@ async def mini_app(user_id: int = 1):
         * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
         body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
         .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; backdrop-filter: blur(10px); padding: 20px; }}
-        
         .screen {{ display: none; }}
         .screen.active {{ display: block; }}
-        
         .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
-        
         .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
         .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
         .duck:active {{ transform: scale(0.94); }}
-        
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
         .action-btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
         .action-btn:active {{ transform: scale(0.96); opacity: 0.9; }}
         .back-btn {{ background: rgba(255,255,255,0.1); margin-top: 20px; }}
         .full-width {{ width: 100%; }}
-        
         .skin-list, .booster-list, .achievement-list, .case-list {{ margin: 20px 0; }}
         .skin-item, .booster-item, .achievement-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }}
         .skin-info, .booster-info, .achievement-info {{ display: flex; align-items: center; gap: 12px; flex: 1; }}
@@ -809,30 +831,24 @@ async def mini_app(user_id: int = 1):
         .skin-btn.owned {{ background: #4caf50; }}
         .skin-btn.equipped {{ background: #ff9800; }}
         .achievement-completed {{ background: #4caf50; color: white; border-radius: 12px; padding: 4px 8px; font-size: 12px; }}
-        
         .case-container {{ text-align: center; margin: 20px 0; }}
         .case-box {{ background: linear-gradient(135deg, #ffd700, #ff8c00); border-radius: 20px; padding: 30px; cursor: pointer; margin-bottom: 20px; transition: transform 0.1s; }}
         .case-box:active {{ transform: scale(0.98); }}
         .case-emoji {{ font-size: 80px; }}
         .case-price {{ color: white; margin-top: 10px; font-weight: bold; }}
-        
         .tournament-card {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 15px; margin-bottom: 15px; }}
         .tournament-name {{ font-size: 18px; font-weight: bold; color: #ffd700; margin-bottom: 10px; }}
         .tournament-desc {{ font-size: 12px; color: #aaa; margin-bottom: 10px; }}
         .leader-list {{ margin-top: 10px; padding-left: 15px; }}
         .leader-item {{ display: flex; justify-content: space-between; font-size: 12px; margin: 5px 0; }}
-        
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
-        
         .energy-bar {{ width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin: 10px 0; overflow: hidden; }}
         .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 6px; transition: width 0.2s; }}
-        .gems-badge {{ background: rgba(0,0,0,0.5); border-radius: 20px; padding: 5px 12px; display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- ЭКРАН 1: ГЛАВНЫЙ -->
         <div id="mainScreen" class="screen active">
             <div class="stats">
                 <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
@@ -852,14 +868,12 @@ async def mini_app(user_id: int = 1):
                 <button class="action-btn" id="openCasesBtn">📦 Кейсы</button>
                 <button class="action-btn" id="openBoostersBtn">⚡ Бустеры</button>
                 <button class="action-btn" id="openAchievementsBtn">🏆 Достижения</button>
-                <button class="action-btn" id="openTournamentsBtn">🎯 Турниры</button>
                 <button class="action-btn" id="openReferralBtn">👥 Рефералы</button>
                 <button class="action-btn" id="profileBtn">📊 Профиль</button>
             </div>
             <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
         </div>
         
-        <!-- ЭКРАН 2: ПРОФИЛЬ -->
         <div id="profileScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">📊 ПРОФИЛЬ</h3>
             <div class="stats">
@@ -867,66 +881,55 @@ async def mini_app(user_id: int = 1):
                 <div class="stat-row"><span class="stat-label">💰 Всего кликов</span><span class="stat-value" id="profileTotalClicks">{stats["total_clicks"]}</span></div>
                 <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="profileTapPower">+{stats["tap_power"]}</span></div>
                 <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="profilePassive">{stats["passive_income"]}/час</span></div>
-                <div class="stat-row"><span class="stat-label">💎 Всего алмазов</span><span class="stat-value" id="profileTotalGems">{stats["gems"]}</span></div>
+                <div class="stat-row"><span class="stat-label">💎 Алмазы</span><span class="stat-value" id="profileGems">{stats["gems"]}</span></div>
                 <div class="stat-row"><span class="stat-label">📅 Серия входов</span><span class="stat-value" id="profileStreak">{stats["daily_streak"]}</span></div>
                 <div class="stat-row"><span class="stat-label">🎨 Скин</span><span class="stat-value" id="profileSkin">{stats["skin"]}</span></div>
             </div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- ЭКРАН 3: МАГАЗИН СКИНОВ -->
         <div id="shopScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">👕 МАГАЗИН СКИНОВ</h3>
             <div id="skinsList" class="skin-list">Загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- ЭКРАН 4: КЕЙСЫ -->
         <div id="casesScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">📦 КЕЙСЫ</h3>
             <div id="casesList" class="case-list">Загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- ЭКРАН 5: БУСТЕРЫ -->
         <div id="boostersScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">⚡ БУСТЕРЫ</h3>
-            <div id="activeBoostersList" class="booster-list">Активные бустеры: загрузка...</div>
-            <div id="shopBoostersList" class="booster-list">Доступные бустеры: загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <div id="activeBoostersList" class="booster-list">Загрузка...</div>
+            <div id="shopBoostersList" class="booster-list">Загрузка...</div>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- ЭКРАН 6: ДОСТИЖЕНИЯ -->
         <div id="achievementsScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">🏆 ДОСТИЖЕНИЯ</h3>
             <div id="achievementsList" class="achievement-list">Загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
-        <!-- ЭКРАН 7: ТУРНИРЫ -->
-        <div id="tournamentsScreen" class="screen">
-            <h3 style="color: white; text-align: center; margin-bottom: 20px;">🎯 ТУРНИРЫ</h3>
-            <div id="tournamentsList">Загрузка...</div>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
-        </div>
-        
-        <!-- ЭКРАН 8: РЕФЕРАЛЫ -->
         <div id="referralScreen" class="screen">
             <h3 style="color: white; text-align: center; margin-bottom: 20px;">👥 РЕФЕРАЛЫ</h3>
-            <div class="stats" style="margin-bottom: 20px;">
+            <div class="stats">
                 <div class="stat-row"><span class="stat-label">👥 Приглашено друзей</span><span class="stat-value" id="referralCount">0</span></div>
                 <div class="stat-row"><span class="stat-label">🎁 Не получено наград</span><span class="stat-value" id="unclaimedRewards">0</span></div>
             </div>
-            <div id="referralLinkBox" style="background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px;">
+            <div style="background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px;">
                 <div style="color: #aaa; font-size: 12px; margin-bottom: 8px;">🔗 Твоя реферальная ссылка:</div>
-                <div id="referralLink" style="color: #ffd700; font-size: 12px; word-break: break-all; font-family: monospace;"></div>
+                <div id="referralLink" style="color: #ffd700; font-size: 12px; word-break: break-all;"></div>
                 <button class="action-btn full-width" id="copyReferralBtn" style="margin-top: 10px; background: #4caf50;">📋 Копировать ссылку</button>
             </div>
             <button class="action-btn full-width" id="claimReferralBtn" style="margin-bottom: 10px;">🎁 Забрать награду</button>
-            <button class="action-btn full-width back-btn" onclick="showScreen('main')">◀️ Назад</button>
+            <button class="action-btn full-width back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
     </div>
-            <script>
+
+    <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
@@ -942,7 +945,7 @@ async def mini_app(user_id: int = 1):
         let maxEnergy = 1000;
         
         function showScreen(screenName) {{
-            const screens = ['mainScreen', 'profileScreen', 'shopScreen', 'casesScreen', 'boostersScreen', 'achievementsScreen', 'tournamentsScreen', 'referralScreen'];
+            const screens = ['mainScreen', 'profileScreen', 'shopScreen', 'casesScreen', 'boostersScreen', 'achievementsScreen', 'referralScreen'];
             screens.forEach(s => document.getElementById(s).classList.remove('active'));
             document.getElementById(screenName).classList.add('active');
             
@@ -950,7 +953,6 @@ async def mini_app(user_id: int = 1):
             if (screenName === 'casesScreen') loadCases();
             if (screenName === 'boostersScreen') loadBoosters();
             if (screenName === 'achievementsScreen') loadAchievements();
-            if (screenName === 'tournamentsScreen') loadTournaments();
             if (screenName === 'referralScreen') loadReferralData();
         }}
         
@@ -962,12 +964,13 @@ async def mini_app(user_id: int = 1):
             document.getElementById('gemsValue').textContent = gems;
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
             
-            if (document.getElementById('profileLevel')) {{
-                document.getElementById('profileLevel').textContent = level;
-                document.getElementById('profileTapPower').textContent = '+' + tapPower;
-                document.getElementById('profilePassive').textContent = passiveIncome + '/час';
-                document.getElementById('profileSkin').textContent = currentSkin;
-            }}
+            if (document.getElementById('profileLevel')) document.getElementById('profileLevel').textContent = level;
+            if (document.getElementById('profileTapPower')) document.getElementById('profileTapPower').textContent = '+' + tapPower;
+            if (document.getElementById('profilePassive')) document.getElementById('profilePassive').textContent = passiveIncome + '/час';
+            if (document.getElementById('profileSkin')) document.getElementById('profileSkin').textContent = currentSkin;
+            if (document.getElementById('profileGems')) document.getElementById('profileGems').textContent = gems;
+            if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').textContent = document.getElementById('totalClicksSpan')?.textContent || '0';
+            if (document.getElementById('profileStreak')) document.getElementById('profileStreak').textContent = document.getElementById('streakSpan')?.textContent || '0';
         }}
         
         async function loadStats() {{
@@ -983,48 +986,44 @@ async def mini_app(user_id: int = 1):
                 energy = data.energy;
                 updateUI();
                 document.getElementById('duck').textContent = currentSkin;
-                if (document.getElementById('profileTotalClicks')) document.getElementById('profileTotalClicks').textContent = data.total_clicks;
-                if (document.getElementById('profileStreak')) document.getElementById('profileStreak').textContent = data.daily_streak;
-                if (document.getElementById('profileTotalGems')) document.getElementById('profileTotalGems').textContent = data.gems;
             }} catch(e) {{ console.error(e); }}
         }}
         
         async function loadSkins() {{
-    try {{
-        const res = await fetch('/api/get_skins?user_id=' + userId);
-        const data = await res.json();
-        const skinsList = document.getElementById('skinsList');
-        skinsList.innerHTML = '';
-        
-        for (const skin of data.skins) {{
-            const div = document.createElement('div');
-            div.className = 'skin-item';
-            let paymentOptions = '';
-            if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
-            if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
-            
-            if (skin.owned && skin.equipped) {{
-                paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
-            }} else if (skin.owned) {{
-                paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
-            }}
-            
-            let limitedText = skin.limited ? '🌟 Лимитированный' : 'Обычный';
-            
-            div.innerHTML = `
-                <div class="skin-info">
-                    <span class="skin-emoji">${skin.emoji}</span>
-                    <div>
-                        <div class="skin-name">${skin.name}</div>
-                        <div class="skin-price">+${skin.bonus} к силе | ${limitedText}</div>
-                    </div>
-                </div>
-                <div>${paymentOptions}</div>
-            `;
-            skinsList.appendChild(div);
+            try {{
+                const res = await fetch('/api/get_skins?user_id=' + userId);
+                const data = await res.json();
+                const skinsList = document.getElementById('skinsList');
+                skinsList.innerHTML = '';
+                
+                for (const skin of data.skins) {{
+                    const div = document.createElement('div');
+                    div.className = 'skin-item';
+                    let paymentOptions = '';
+                    if (skin.price_clicks > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'clicks\')">💎 ' + skin.price_clicks + ' кликов</button>';
+                    if (skin.price_gems > 0) paymentOptions += '<button class="skin-btn" onclick="buySkin(' + skin.id + ', \'gems\')">💎 ' + skin.price_gems + ' алмазов</button>';
+                    
+                    if (skin.owned && skin.equipped) {{
+                        paymentOptions = '<span class="skin-btn equipped">✅ ЭКИПИРОВАН</span>';
+                    }} else if (skin.owned) {{
+                        paymentOptions = '<button class="skin-btn owned" onclick="equipSkin(' + skin.id + ')">⚡ ЭКИПИРОВАТЬ</button>';
+                    }}
+                    
+                    let limitedText = skin.limited ? '🌟 Лимитированный' : 'Обычный';
+                    
+                    div.innerHTML = 
+                        '<div class="skin-info">' +
+                            '<span class="skin-emoji">' + skin.emoji + '</span>' +
+                            '<div>' +
+                                '<div class="skin-name">' + skin.name + '</div>' +
+                                '<div class="skin-price">+' + skin.bonus + ' к силе | ' + limitedText + '</div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div>' + paymentOptions + '</div>';
+                    skinsList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
         }}
-    }} catch(e) {{ console.error(e); }}
-}}
         
         async function buySkin(skinId, payment) {{
             const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId + '&payment=' + payment, {{method: 'POST'}});
@@ -1068,12 +1067,11 @@ async def mini_app(user_id: int = 1):
                     
                     const div = document.createElement('div');
                     div.className = 'case-container';
-                    div.innerHTML = `
-                        <div class="case-box" onclick="openCase(${caseItem.id})">
-                            <div class="case-emoji">${caseItem.emoji}</div>
-                            <div class="case-price">${caseItem.name}<br>${priceText}</div>
-                        </div>
-                    `;
+                    div.innerHTML = 
+                        '<div class="case-box" onclick="openCase(' + caseItem.id + ')">' +
+                            '<div class="case-emoji">' + caseItem.emoji + '</div>' +
+                            '<div class="case-price">' + caseItem.name + '<br>' + priceText + '</div>' +
+                        '</div>';
                     casesList.appendChild(div);
                 }}
             }} catch(e) {{ console.error(e); }}
@@ -1099,17 +1097,16 @@ async def mini_app(user_id: int = 1):
                 if (data.active_boosters.length > 0) {{
                     activeDiv.innerHTML = '<h4 style="color: #ffd700; margin-bottom: 10px;">⚡ АКТИВНЫЕ БУСТЕРЫ:</h4>';
                     for (const b of data.active_boosters) {{
-                        activeDiv.innerHTML += `
-                            <div class="booster-item">
-                                <div class="booster-info">
-                                    <span class="booster-emoji">${b.emoji}</span>
-                                    <div>
-                                        <div class="booster-name">${b.name}</div>
-                                        <div class="booster-price">${b.description} | Осталось: ${b.minutes_left} мин</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                        activeDiv.innerHTML += 
+                            '<div class="booster-item">' +
+                                '<div class="booster-info">' +
+                                    '<span class="booster-emoji">' + b.emoji + '</span>' +
+                                    '<div>' +
+                                        '<div class="booster-name">' + b.name + '</div>' +
+                                        '<div class="booster-price">' + b.description + ' | Осталось: ' + b.minutes_left + ' мин</div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>';
                     }}
                 }} else {{
                     activeDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Нет активных бустеров</div>';
@@ -1121,18 +1118,17 @@ async def mini_app(user_id: int = 1):
                     let priceText = '';
                     if (b.price_clicks > 0) priceText = b.price_clicks + ' кликов';
                     if (b.price_gems > 0) priceText = b.price_gems + ' алмазов';
-                    shopDiv.innerHTML += `
-                        <div class="booster-item">
-                            <div class="booster-info">
-                                <span class="booster-emoji">${b.emoji}</span>
-                                <div>
-                                    <div class="booster-name">${b.name}</div>
-                                    <div class="booster-price">${b.description} | Цена: ${priceText}</div>
-                                </div>
-                            </div>
-                            <button class="booster-btn" onclick="buyBooster(${b.id})">💎 КУПИТЬ</button>
-                        </div>
-                    `;
+                    shopDiv.innerHTML += 
+                        '<div class="booster-item">' +
+                            '<div class="booster-info">' +
+                                '<span class="booster-emoji">' + b.emoji + '</span>' +
+                                '<div>' +
+                                    '<div class="booster-name">' + b.name + '</div>' +
+                                    '<div class="booster-price">' + b.description + ' | Цена: ' + priceText + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<button class="booster-btn" onclick="buyBooster(' + b.id + ')">💎 КУПИТЬ</button>' +
+                        '</div>';
                 }}
             }} catch(e) {{ console.error(e); }}
         }}
@@ -1151,69 +1147,30 @@ async def mini_app(user_id: int = 1):
             }}
         }}
         
-        async function loadTournaments() {{
-    try {{
-        const res = await fetch('/api/get_tournaments?user_id=' + userId);
-        const data = await res.json();
-        const tournamentsList = document.getElementById('tournamentsList');
-        tournamentsList.innerHTML = '';
-        
-        if (data.tournaments.length === 0) {{
-            tournamentsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Активных турниров нет</div>';
-        }} else {{
-            for (const t of data.tournaments) {{
-                let leadersHtml = '<div class="leader-list"><strong>🏆 Топ-10:</strong>';
-                for (let i = 0; i < Math.min(t.leaders.length, 10); i++) {{
-                    leadersHtml += '<div class="leader-item"><span>' + (i+1) + '. Пользователь ' + t.leaders[i].user_id + '</span><span>' + t.leaders[i].score + ' кликов</span></div>';
-                }}
-                leadersHtml += '</div>';
-                
-                let endDate = new Date(t.end_date).toLocaleString();
-                
-                const div = document.createElement('div');
-                div.className = 'tournament-card';
-                div.innerHTML = 
-                    '<div class="tournament-name">🎯 ' + t.name + '</div>' +
-                    '<div class="tournament-desc">' + t.description + '</div>' +
-                    '<div class="tournament-desc">📅 До: ' + endDate + '</div>' +
-                    '<div class="tournament-desc">🎁 Награда: +' + t.reward_gems + '💎 +' + t.reward_clicks + '💰</div>' +
-                    '<div class="tournament-desc">📊 Твой счёт: ' + t.my_score + ' кликов</div>' +
-                    leadersHtml;
-                tournamentsList.appendChild(div);
-            }}
-        }}
-    }} catch(e) {{ console.error(e); }}
-}}
-        
-        async function loadTournaments() {{
+        async function loadAchievements() {{
             try {{
-                const res = await fetch('/api/get_tournaments?user_id=' + userId);
+                const res = await fetch('/api/get_achievements?user_id=' + userId);
                 const data = await res.json();
-                const tournamentsList = document.getElementById('tournamentsList');
-                tournamentsList.innerHTML = '';
+                const achievementsList = document.getElementById('achievementsList');
+                achievementsList.innerHTML = '';
                 
-                if (data.tournaments.length === 0) {{
-                    tournamentsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Активных турниров нет</div>';
-                }} else {{
-                    for (const t of data.tournaments) {{
-                        let leadersHtml = '<div class="leader-list"><strong>🏆 Топ-10:</strong>';
-                        for (let i = 0; i < Math.min(t.leaders.length, 10); i++) {{
-                            leadersHtml += '<div class="leader-item"><span>' + (i+1) + '. Пользователь ' + t.leaders[i].user_id + '</span><span>' + t.leaders[i].score + ' кликов</span></div>';
-                        }}
-                        leadersHtml += '</div>';
-                        
-                        const div = document.createElement('div');
-                        div.className = 'tournament-card';
-                        div.innerHTML = `
-                            <div class="tournament-name">🎯 ${t.name}</div>
-                            <div class="tournament-desc">${t.description}</div>
-                            <div class="tournament-desc">📅 До: ${new Date(t.end_date).toLocaleString()}</div>
-                            <div class="tournament-desc">🎁 Награда: +${t.reward_gems}💎 +${t.reward_clicks}💰</div>
-                            <div class="tournament-desc">📊 Твой счёт: ${t.my_score} кликов</div>
-                            ${leadersHtml}
-                        `;
-                        tournamentsList.appendChild(div);
-                    }}
+                for (const ach of data.achievements) {{
+                    const div = document.createElement('div');
+                    div.className = 'achievement-item';
+                    let emoji = ach.completed ? '🏆' : '🔒';
+                    let statusText = ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>';
+                    
+                    div.innerHTML = 
+                        '<div class="achievement-info">' +
+                            '<span class="achievement-emoji">' + emoji + '</span>' +
+                            '<div>' +
+                                '<div class="achievement-name">' + ach.name + '</div>' +
+                                '<div class="achievement-desc">' + ach.description + ' (' + ach.condition + ')</div>' +
+                                '<div class="achievement-desc">🎁 Награда: +' + ach.reward_gems + '💎 +' + ach.reward_clicks + '💰</div>' +
+                            '</div>' +
+                        '</div>' +
+                        statusText;
+                    achievementsList.appendChild(div);
                 }}
             }} catch(e) {{ console.error(e); }}
         }}
@@ -1339,7 +1296,6 @@ async def mini_app(user_id: int = 1):
         document.getElementById('openCasesBtn').onclick = () => showScreen('casesScreen');
         document.getElementById('openBoostersBtn').onclick = () => showScreen('boostersScreen');
         document.getElementById('openAchievementsBtn').onclick = () => showScreen('achievementsScreen');
-        document.getElementById('openTournamentsBtn').onclick = () => showScreen('tournamentsScreen');
         document.getElementById('openReferralBtn').onclick = () => showScreen('referralScreen');
         document.getElementById('profileBtn').onclick = () => showScreen('profileScreen');
         document.getElementById('closeBtn').onclick = () => tg.close();
@@ -1360,4 +1316,4 @@ async def mini_app(user_id: int = 1):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)                           
+    uvicorn.run(app, host="0.0.0.0", port=port)
