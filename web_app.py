@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -12,10 +13,12 @@ class ClickData(BaseModel):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
+# ==================== БАЗОВЫЕ ФУНКЦИИ ====================
+
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, tap_power, current_skin FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     
@@ -24,18 +27,21 @@ def get_user_stats(user_id: int):
             "clicks": int(result[0]),
             "level": int(result[1]),
             "tap_power": int(result[2]),
-            "skin": str(result[3]) if result[3] else "🦆"
+            "passive_income": int(result[3]),
+            "skin": str(result[4]) if result[4] else "🦆",
+            "total_clicks": int(result[5]),
+            "daily_streak": int(result[6])
         }
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (user_id, clicks, level, tap_power, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, 0, 1, 1, "🦆", 0, 0)
+            "INSERT INTO users (user_id, clicks, level, tap_power, passive_income, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, 0, 1, 1, 0, "🦆", 0, 0)
         )
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "tap_power": 1, "skin": "🦆"}
+        return {"clicks": 0, "level": 1, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -45,13 +51,204 @@ def update_clicks(user_id: int, increment: int):
     if result:
         new_clicks = result[0] + increment
         new_total = result[1] + increment
-        cursor.execute("UPDATE users SET clicks = ?, total_clicks = ? WHERE user_id = ?", (new_clicks, new_total, user_id))
+        new_level = 1 + new_total // 100
+        cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ? WHERE user_id = ?", (new_clicks, new_total, new_level, user_id))
         conn.commit()
     conn.close()
 
-def generate_html(clicks: int, level: int, tap_power: int, skin: str) -> str:
-    """Генерирует HTML-страницу с подставленными значениями"""
-    return f'''<!DOCTYPE html>
+# ==================== API ДЛЯ КНОПОК ====================
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT clicks, tap_power FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    clicks, tap_power = result
+    price = tap_power * 100
+    
+    if clicks >= price:
+        new_tap_power = tap_power + 1
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_tap_power": new_tap_power, "new_clicks": new_clicks}
+    else:
+        conn.close()
+        return {"success": False, "need": price, "clicks": clicks}
+
+@app.post("/api/upgrade_passive")
+async def upgrade_passive(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT clicks, passive_income FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    clicks, passive_income = result
+    price = 500 + passive_income * 100
+    
+    if clicks >= price:
+        new_passive = passive_income + 5
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ?, passive_income = ? WHERE user_id = ?", (new_clicks, new_passive, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_passive": new_passive, "new_clicks": new_clicks}
+    else:
+        conn.close()
+        return {"success": False, "need": price, "clicks": clicks}
+
+@app.post("/api/collect_passive")
+async def collect_passive(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT clicks, passive_income FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    clicks, passive_income = result
+    if passive_income > 0:
+        earned = passive_income
+        new_clicks = clicks + earned
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "earned": earned, "new_clicks": new_clicks}
+    else:
+        conn.close()
+        return {"success": False, "message": "Пассивный доход не накоплен"}
+
+@app.post("/api/claim_daily")
+async def claim_daily(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT last_daily, daily_streak, clicks FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    last_daily, daily_streak, clicks = result
+    today = datetime.now().date()
+    last_date = datetime.fromisoformat(last_daily).date() if last_daily else None
+    
+    if last_date == today:
+        conn.close()
+        return {"success": False, "message": "Уже забирал сегодня"}
+    
+    if last_date == today - timedelta(days=1):
+        daily_streak += 1
+    else:
+        daily_streak = 1
+    
+    bonus = min(100 + daily_streak * 50, 600)
+    new_clicks = clicks + bonus
+    
+    cursor.execute("UPDATE users SET clicks = ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", 
+                   (new_clicks, today.isoformat(), daily_streak, user_id))
+    conn.commit()
+    conn.close()
+    
+    return {"success": True, "bonus": bonus, "streak": daily_streak, "new_clicks": new_clicks}
+
+@app.post("/api/buy_skin")
+async def buy_skin(user_id: int, skin_id: int):
+    skins = {2: 5000, 3: 15000, 4: 30000, 5: 50000}  # id: price
+    if skin_id not in skins:
+        return {"success": False, "message": "Скин не найден"}
+    
+    price = skins[skin_id]
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        conn.close()
+        return {"success": False, "message": "Пользователь не найден"}
+    
+    clicks = result[0]
+    
+    if clicks >= price:
+        new_clicks = clicks - price
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_clicks": new_clicks}
+    else:
+        conn.close()
+        return {"success": False, "need": price, "clicks": clicks}
+
+@app.post("/api/equip_skin")
+async def equip_skin(user_id: int, skin_id: int):
+    skins_emoji = {2: "🌟", 3: "🤖", 4: "👻", 5: "😈"}
+    if skin_id not in skins_emoji:
+        return {"success": False, "message": "Скин не найден"}
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
+    if not cursor.fetchone():
+        conn.close()
+        return {"success": False, "message": "Скин не куплен"}
+    
+    emoji = skins_emoji[skin_id]
+    cursor.execute("UPDATE users SET current_skin = ? WHERE user_id = ?", (emoji, user_id))
+    conn.commit()
+    conn.close()
+    
+    return {"success": True, "skin": emoji}
+
+@app.get("/api/get_skins")
+async def get_skins(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
+    owned = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    
+    all_skins = [
+        {"id": 2, "name": "Золотая утка", "emoji": "🌟", "price": 5000, "bonus": 2},
+        {"id": 3, "name": "Киберутка", "emoji": "🤖", "price": 15000, "bonus": 5},
+        {"id": 4, "name": "Утка-призрак", "emoji": "👻", "price": 30000, "bonus": 10},
+        {"id": 5, "name": "Дьявольская утка", "emoji": "😈", "price": 50000, "bonus": 15},
+    ]
+    
+    for skin in all_skins:
+        skin["owned"] = skin["id"] in owned
+    
+    return {"skins": all_skins}
+
+@app.get("/api/get_referrals")
+async def get_referrals(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ?", (user_id,))
+    count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND reward_claimed = 0", (user_id,))
+    unclaimed = cursor.fetchone()[0]
+    conn.close()
+    
+    return {"count": count, "unclaimed": unclaimed}
+
+# ==================== ОСНОВНЫЕ РОУТЫ ====================
+
+@app.get("/", response_class=HTMLResponse)
+async def mini_app(user_id: int = 1):
+    stats = get_user_stats(user_id)
+    
+    html = f'''<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -59,102 +256,42 @@ def generate_html(clicks: int, level: int, tap_power: int, skin: str) -> str:
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }}
-        body {{
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }}
-        .container {{
-            max-width: 500px;
-            width: 100%;
-            background: rgba(255,255,255,0.05);
-            border-radius: 32px;
-            backdrop-filter: blur(10px);
-            padding: 20px;
-        }}
-        .stats {{
-            background: rgba(0,0,0,0.3);
-            border-radius: 24px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }}
-        .stat-row {{
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
+        body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
+        .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; backdrop-filter: blur(10px); padding: 20px; }}
+        .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
+        .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
         .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
         .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
         .duck:active {{ transform: scale(0.94); }}
-        .energy-section {{ margin: 20px 0; }}
-        .energy-label {{ display: flex; justify-content: space-between; font-size: 12px; color: #aaa; margin-bottom: 6px; }}
-        .energy-bar-bg {{ background: rgba(255,255,255,0.15); border-radius: 12px; height: 12px; overflow: hidden; }}
-        .energy-fill {{ width: 100%; height: 100%; background: linear-gradient(90deg, #00c6ff, #0072ff); border-radius: 12px; transition: width 0.2s; }}
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
-        .action-btn {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            border-radius: 16px;
-            padding: 14px 8px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            text-align: center;
-        }}
+        .action-btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
         .action-btn:active {{ transform: scale(0.96); opacity: 0.9; }}
         .full-width {{ width: 100%; background: rgba(255,255,255,0.1); }}
-        .tap-value {{
-            position: fixed;
-            pointer-events: none;
-            font-size: 28px;
-            font-weight: bold;
-            color: #ffd700;
-            animation: floatUp 0.6s ease-out forwards;
-            z-index: 1000;
-        }}
-        @keyframes floatUp {{
-            0% {{ opacity: 1; transform: translateY(0) scale(0.8); }}
-            100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }}
-        }}
+        .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
+        @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="stats">
-            <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{level}</span></div>
-            <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{clicks}</span></div>
-            <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{tap_power}</span></div>
+            <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
+            <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
+            <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
+            <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
         </div>
-        <div class="duck-container"><div class="duck" id="duck">{skin}</div></div>
-        <div class="energy-section">
-            <div class="energy-label"><span>⚡ Энергия</span><span id="energyText">1000/1000</span></div>
-            <div class="energy-bar-bg"><div class="energy-fill" id="energyFill" style="width: 100%"></div></div>
-        </div>
+        <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
         <div class="button-grid">
-            <button class="action-btn" id="profileBtn">📊 Профиль</button>
-            <button class="action-btn" id="shopBtn">👕 Магазин</button>
-            <button class="action-btn" id="upgradeBtn">💎 Прокачка</button>
-            <button class="action-btn" id="questsBtn">📋 Задания</button>
-            <button class="action-btn" id="leaderboardBtn">🏆 Топ</button>
-            <button class="action-btn" id="friendsBtn">👥 Друзья</button>
-            <button class="action-btn" id="passiveBtn">💰 Пассивка</button>
+            <button class="action-btn" id="upgradeTapBtn">💪 Улучшить тап</button>
+            <button class="action-btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
+            <button class="action-btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
             <button class="action-btn" id="dailyBtn">🎁 Ежедневный</button>
+            <button class="action-btn" id="shopBtn">👕 Магазин</button>
+            <button class="action-btn" id="referralBtn">👥 Рефералы</button>
+            <button class="action-btn" id="profileBtn">📊 Профиль</button>
         </div>
         <button class="action-btn full-width" id="closeBtn">✖️ Закрыть</button>
     </div>
@@ -164,117 +301,122 @@ def generate_html(clicks: int, level: int, tap_power: int, skin: str) -> str:
         tg.expand();
         
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let clicks = {clicks};
-        let level = {level};
-        let tapPower = {tap_power};
-        let energy = 1000;
-        let maxEnergy = 1000;
-        let regenInterval = null;
+        let clicks = {stats["clicks"]};
+        let level = {stats["level"]};
+        let tapPower = {stats["tap_power"]};
+        let passiveIncome = {stats["passive_income"]};
         
-        const duck = document.getElementById('duck');
-        const clicksSpan = document.getElementById('clicksValue');
-        const levelSpan = document.getElementById('levelValue');
-        const tapPowerSpan = document.getElementById('tapPowerValue');
-        const energyFill = document.getElementById('energyFill');
-        const energyText = document.getElementById('energyText');
-        
-        function updateUI() {{
-            clicksSpan.textContent = clicks;
-            levelSpan.textContent = level;
-            tapPowerSpan.textContent = `+${{tapPower}}`;
-            energyFill.style.width = `${{(energy / maxEnergy) * 100}}%`;
-            energyText.textContent = `${{Math.floor(energy)}}/${{maxEnergy}}`;
+        function updateStats() {{
+            document.getElementById('clicksValue').textContent = clicks;
+            document.getElementById('levelValue').textContent = level;
+            document.getElementById('tapPowerValue').textContent = `+${{tapPower}}`;
+            document.getElementById('passiveValue').textContent = `${{passiveIncome}}/час`;
         }}
         
-        function showFloatingNumber(x, y, value) {{
-            const el = document.createElement('div');
-            el.className = 'tap-value';
-            el.textContent = `+${{value}}`;
-            el.style.left = `${{x}}px`;
-            el.style.top = `${{y}}px`;
-            document.body.appendChild(el);
-            setTimeout(() => el.remove(), 600);
+        async function loadStats() {{
+            try {{
+                const res = await fetch(`/api/stats/${{userId}}`);
+                const data = await res.json();
+                clicks = data.clicks;
+                level = data.level;
+                tapPower = data.tap_power;
+                passiveIncome = data.passive_income;
+                updateStats();
+            }} catch(e) {{ console.error(e); }}
         }}
         
         async function sendClick(increment) {{
             try {{
-                const response = await fetch('/api/click', {{
+                await fetch('/api/click', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ user_id: userId, clicks: increment }})
                 }});
-                const data = await response.json();
-                clicks = data.clicks;
-                level = data.level;
-                tapPower = data.tap_power;
-                updateUI();
-            }} catch(e) {{ console.error('Click error:', e); }}
+                await loadStats();
+            }} catch(e) {{ console.error(e); }}
         }}
         
-        function startEnergyRegen() {{
-            if (regenInterval) clearInterval(regenInterval);
-            regenInterval = setInterval(() => {{
-                if (energy < maxEnergy) {{
-                    energy = Math.min(energy + 5, maxEnergy);
-                    updateUI();
-                }} else if (energy >= maxEnergy && regenInterval) {{
-                    clearInterval(regenInterval);
-                    regenInterval = null;
-                }}
-            }}, 1000);
-        }}
-        
-        duck.addEventListener('click', async (e) => {{
-            if (energy <= 0) {{
-                tg.showPopup({{ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{{type: 'ok'}}] }});
-                return;
-            }}
-            const rect = duck.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top;
-            showFloatingNumber(x, y, tapPower);
-            energy = Math.max(0, energy - 1);
-            updateUI();
+        document.getElementById('duck').onclick = async () => {{
+            clicks += tapPower;
+            updateStats();
             await sendClick(tapPower);
-            if (energy < maxEnergy) startEnergyRegen();
-        }});
+        }};
         
-        async function loadStats() {{
-            try {{
-                const response = await fetch(`/api/stats/${{userId}}`);
-                const data = await response.json();
-                clicks = data.clicks;
-                level = data.level;
-                tapPower = data.tap_power;
-                updateUI();
-            }} catch(e) {{ console.error('Load error:', e); }}
-        }}
+        document.getElementById('upgradeTapBtn').onclick = async () => {{
+            const res = await fetch(`/api/upgrade_tap?user_id=${{userId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Улучшено!', message: `Сила клика: +${{data.new_tap_power}}`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
         
-        document.getElementById('profileBtn').onclick = () => tg.showPopup({{title: 'Профиль', message: `Клики: ${{clicks}}\\nУровень: ${{level}}\\nСила: +${{tapPower}}`, buttons: [{{type: 'ok'}}]}});
-        document.getElementById('shopBtn').onclick = () => tg.showPopup({{title: 'Магазин', message: 'Скоро тут будут скины!', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({{title: 'Прокачка', message: 'Улучшай силу клика!', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('questsBtn').onclick = () => tg.showPopup({{title: 'Задания', message: 'Ежедневные задания', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('leaderboardBtn').onclick = () => tg.showPopup({{title: 'Топ игроков', message: 'Скоро появится', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('friendsBtn').onclick = () => tg.showPopup({{title: 'Друзья', message: 'Реферальная система', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('passiveBtn').onclick = () => tg.showPopup({{title: 'Пассивный доход', message: 'Доход будет начисляться', buttons: [{{type: 'ok'}}]}});
-        document.getElementById('dailyBtn').onclick = () => tg.showPopup({{title: 'Ежедневный бонус', message: 'Заходи каждый день!', buttons: [{{type: 'ok'}}]}});
+        document.getElementById('upgradePassiveBtn').onclick = async () => {{
+            const res = await fetch(`/api/upgrade_passive?user_id=${{userId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Пассивный доход улучшен!', message: `Теперь +${{data.new_passive}}/час`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: `Нужно: ${{data.need}} кликов`, buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('collectPassiveBtn').onclick = async () => {{
+            const res = await fetch(`/api/collect_passive?user_id=${{userId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '💰 Получено!', message: `+${{data.earned}} кликов!`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '😴 Нет дохода', message: data.message, buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('dailyBtn').onclick = async () => {{
+            const res = await fetch(`/api/claim_daily?user_id=${{userId}}`, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '🎁 Бонус получен!', message: `+${{data.bonus}} кликов! Серия: ${{data.streak}}`, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '❌ Уже забирал', message: data.message, buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('shopBtn').onclick = async () => {{
+            const res = await fetch(`/api/get_skins?user_id=${{userId}}`);
+            const data = await res.json();
+            let msg = "👕 МАГАЗИН СКИНОВ:\\n\\n";
+            for (const skin of data.skins) {{
+                msg += `${{skin.emoji}} ${{skin.name}} — ${{skin.price}} кликов`;
+                if (skin.owned) msg += " ✅ КУПЛЕН";
+                msg += "\\n";
+            }}
+            tg.showPopup({{title: 'Магазин', message: msg, buttons: [{{type: 'ok'}}]}});
+        }};
+        
+        document.getElementById('referralBtn').onclick = async () => {{
+            const res = await fetch(`/api/get_referrals?user_id=${{userId}}`);
+            const data = await res.json();
+            tg.showPopup({{title: '👥 Рефералы', message: `Приглашено друзей: ${{data.count}}\\nНе получено наград: ${{data.unclaimed}}`, buttons: [{{type: 'ok'}}]}});
+        }};
+        
+        document.getElementById('profileBtn').onclick = async () => {{
+            const res = await fetch(`/api/stats/${{userId}}`);
+            const data = await res.json();
+            tg.showPopup({{title: '📊 Профиль', message: `Клики: ${{data.clicks}}\\nУровень: ${{data.level}}\\nСила клика: +${{data.tap_power}}\\nПассивный доход: ${{data.passive_income}}/час`, buttons: [{{type: 'ok'}}]}});
+        }};
+        
         document.getElementById('closeBtn').onclick = () => tg.close();
         
         loadStats();
-        startEnergyRegen();
     </script>
 </body>
 </html>'''
-
-@app.get("/", response_class=HTMLResponse)
-async def mini_app(user_id: int = 1):
-    stats = get_user_stats(user_id)
-    html = generate_html(
-        clicks=stats["clicks"],
-        level=stats["level"],
-        tap_power=stats["tap_power"],
-        skin=stats["skin"]
-    )
+    
     return HTMLResponse(content=html)
 
 @app.post("/api/click")
@@ -284,7 +426,8 @@ async def handle_click(data: ClickData):
     return JSONResponse(content={
         "clicks": stats["clicks"],
         "level": stats["level"],
-        "tap_power": stats["tap_power"]
+        "tap_power": stats["tap_power"],
+        "passive_income": stats["passive_income"]
     })
 
 @app.get("/api/stats/{user_id}")
@@ -294,72 +437,14 @@ async def get_stats(user_id: int):
         "clicks": stats["clicks"],
         "level": stats["level"],
         "tap_power": stats["tap_power"],
-        "skin": stats["skin"]
+        "passive_income": stats["passive_income"],
+        "skin": stats["skin"],
+        "daily_streak": stats["daily_streak"]
     })
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-# ==================== API ДЛЯ КНОПОК ====================
-
-@app.post("/api/upgrade_tap")
-async def upgrade_tap(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT clicks, tap_power FROM users WHERE user_id = ?", (user_id,))
-    clicks, tap_power = cursor.fetchone()
-    price = tap_power * 100
-    if clicks >= price:
-        new_tap_power = tap_power + 1
-        new_clicks = clicks - price
-        cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
-        conn.commit()
-        conn.close()
-        return {"success": True, "new_tap_power": new_tap_power}
-    conn.close()
-    return {"success": False, "need": price}
-
-@app.post("/api/buy_skin")
-async def buy_skin(user_id: int, skin_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT price_clicks FROM skins WHERE id = ?", (skin_id,))
-    price = cursor.fetchone()[0]
-    cursor.execute("SELECT clicks FROM users WHERE user_id = ?", (user_id,))
-    clicks = cursor.fetchone()[0]
-    if clicks >= price:
-        new_clicks = clicks - price
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-        cursor.execute("INSERT INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
-        conn.commit()
-        conn.close()
-        return {"success": True}
-    conn.close()
-    return {"success": False, "need": price}
-
-@app.post("/api/claim_daily")
-async def claim_daily(user_id: int):
-    from datetime import datetime, timedelta
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT last_daily, daily_streak, clicks FROM users WHERE user_id = ?", (user_id,))
-    last_daily, daily_streak, clicks = cursor.fetchone()
-    today = datetime.now().date()
-    last_date = datetime.fromisoformat(last_daily).date() if last_daily else None
-    if last_date == today:
-        conn.close()
-        return {"success": False, "message": "Уже забирал сегодня"}
-    if last_date == today - timedelta(days=1):
-        daily_streak += 1
-    else:
-        daily_streak = 1
-    bonus = min(100 + daily_streak * 50, 600)
-    new_clicks = clicks + bonus
-    cursor.execute("UPDATE users SET clicks = ?, last_daily = ?, daily_streak = ? WHERE user_id = ?", (new_clicks, today.isoformat(), daily_streak, user_id))
-    conn.commit()
-    conn.close()
-    return {"success": True, "bonus": bonus, "streak": daily_streak}
 
 if __name__ == "__main__":
     import uvicorn
