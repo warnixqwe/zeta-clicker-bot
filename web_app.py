@@ -508,33 +508,236 @@ async def mini_app(user_id: int = 1):
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; }}
-        body {{ min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); font-family: Arial, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; }}
-        .container {{ max-width: 500px; width: 100%; background: rgba(255,255,255,0.05); border-radius: 32px; padding: 20px; }}
-        .screen {{ display: none; }}
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }}
+        
+        body {{
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        
+        /* Адаптация под тему Telegram */
+        @media (prefers-color-scheme: light) {{
+            body {{
+                background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            }}
+            .container {{ background: rgba(255,255,255,0.9) !important; backdrop-filter: blur(10px); }}
+            .stat-label {{ color: #666 !important; }}
+            .stat-value {{ color: #ff8c00 !important; }}
+            .stats {{ background: rgba(0,0,0,0.05) !important; }}
+            .skin-item, .booster-item, .case-item, .achievement-item, .leaderboard-item {{ background: rgba(0,0,0,0.05) !important; }}
+            h3 {{ color: #333 !important; }}
+        }}
+        
+        .container {{
+            max-width: 500px;
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border-radius: 32px;
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }}
+        
+        .screen {{
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }}
+        
         .screen.active {{ display: block; }}
-        .stats {{ background: rgba(0,0,0,0.3); border-radius: 24px; padding: 16px; margin-bottom: 24px; }}
-        .stat-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }}
+        
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        
+        .stats {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 24px;
+            padding: 16px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(5px);
+        }}
+        
+        .stat-row {{
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }}
+        
         .stat-row:last-child {{ border-bottom: none; }}
         .stat-label {{ color: #aaa; font-size: 14px; }}
         .stat-value {{ color: #ffd700; font-size: 20px; font-weight: bold; }}
-        .duck-container {{ display: flex; justify-content: center; margin: 20px 0; }}
-        .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s; }}
-        .duck:active {{ transform: scale(0.94); }}
-        .btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 16px; padding: 14px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 20px; }}
-        .back-btn {{ background: rgba(255,255,255,0.1); }}
-        .skin-list, .booster-list, .case-list, .achievement-list, .leaderboard-list {{ margin: 20px 0; }}
-        .skin-item, .booster-item, .case-item, .achievement-item, .leaderboard-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
-        .skin-info, .booster-info, .achievement-info {{ display: flex; align-items: center; gap: 12px; }}
+        
+        .duck-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            position: relative;
+        }}
+        
+        .duck {{
+            font-size: 180px;
+            cursor: pointer;
+            transition: transform 0.1s ease, filter 0.2s ease;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+        }}
+        
+        .duck:active {{
+            transform: scale(0.92);
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.3));
+        }}
+        
+        .btn {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 16px;
+            padding: 14px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 12px;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }}
+        
+        .btn:active {{
+            transform: scale(0.97);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }}
+        
+        .back-btn {{
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(5px);
+        }}
+        
+        .energy-bar {{
+            width: 100%;
+            height: 12px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 6px;
+            margin: 10px 0;
+            overflow: hidden;
+        }}
+        
+        .energy-fill {{
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc66);
+            border-radius: 6px;
+            transition: width 0.3s ease;
+        }}
+        
+        .tap-value {{
+            position: fixed;
+            pointer-events: none;
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            animation: floatUp 0.6s ease-out forwards;
+            z-index: 1000;
+        }}
+        
+        @keyframes floatUp {{
+            0% {{ opacity: 1; transform: translateY(0) scale(0.6); }}
+            100% {{ opacity: 0; transform: translateY(-100px) scale(1.2); }}
+        }}
+        
+        .skin-list, .booster-list, .case-list, .achievement-list, .leaderboard-list {{
+            margin: 20px 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }}
+        
+        .skin-item, .booster-item, .case-item, .achievement-item, .leaderboard-item {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.1s ease;
+        }}
+        
+        .skin-item:hover, .booster-item:hover, .case-item:hover {{
+            transform: scale(1.01);
+        }}
+        
+        .skin-info, .booster-info, .achievement-info {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+        
         .skin-emoji, .booster-emoji, .case-emoji, .achievement-emoji {{ font-size: 40px; }}
         .skin-name, .booster-name, .achievement-name {{ font-size: 16px; font-weight: bold; }}
         .skin-price, .booster-price, .case-price, .achievement-desc {{ font-size: 12px; color: #ffd700; }}
-        .skin-buy-btn, .booster-buy-btn, .case-open-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
-        .case-open-btn {{ background: linear-gradient(135deg, #ffd700, #ff8c00); }}
-        .energy-bar {{ width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin: 10px 0; overflow: hidden; }}
-        .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 6px; transition: width 0.2s; }}
-        .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
-        @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
+        
+        .skin-buy-btn, .booster-buy-btn, .case-open-btn {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            padding: 8px 16px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }}
+        
+        .skin-buy-btn:active, .booster-buy-btn:active, .case-open-btn:active {{
+            transform: scale(0.95);
+        }}
+        
+        .case-open-btn {{
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            color: #333;
+            font-weight: bold;
+        }}
+        
+        h3 {{
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }}
+        
+        .achievement-completed {{
+            background: #4caf50;
+            color: white;
+            border-radius: 12px;
+            padding: 4px 12px;
+            font-size: 12px;
+        }}
+        
+        /* Стилизация скроллбара */
+        .skin-list::-webkit-scrollbar, .booster-list::-webkit-scrollbar {{
+            width: 5px;
+        }}
+        
+        .skin-list::-webkit-scrollbar-track {{
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }}
+        
+        .skin-list::-webkit-scrollbar-thumb {{
+            background: #667eea;
+            border-radius: 10px;
+        }}
     </style>
 </head>
 <body>
@@ -564,21 +767,21 @@ async def mini_app(user_id: int = 1):
         
         <!-- Магазин -->
         <div id="shopScreen" class="screen">
-            <h3 style="color: white; text-align: center;">👕 МАГАЗИН СКИНОВ</h3>
+            <h3>👕 МАГАЗИН СКИНОВ</h3>
             <div id="skinsList" class="skin-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
         <!-- Кейсы -->
         <div id="casesScreen" class="screen">
-            <h3 style="color: white; text-align: center;">📦 КЕЙСЫ</h3>
+            <h3>📦 КЕЙСЫ</h3>
             <div id="casesList" class="case-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
         <!-- Бустеры -->
         <div id="boostersScreen" class="screen">
-            <h3 style="color: white; text-align: center;">⚡ БУСТЕРЫ</h3>
+            <h3>⚡ БУСТЕРЫ</h3>
             <div id="activeBoostersList" class="booster-list">Активные бустеры: загрузка...</div>
             <div id="shopBoostersList" class="booster-list">Доступные бустеры: загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
@@ -586,14 +789,14 @@ async def mini_app(user_id: int = 1):
         
         <!-- Достижения -->
         <div id="achievementsScreen" class="screen">
-            <h3 style="color: white; text-align: center;">🏆 ДОСТИЖЕНИЯ</h3>
+            <h3>🏆 ДОСТИЖЕНИЯ</h3>
             <div id="achievementsList" class="achievement-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
         
         <!-- Топ игроков -->
         <div id="leaderboardScreen" class="screen">
-            <h3 style="color: white; text-align: center;">🏆 ТОП ИГРОКОВ</h3>
+            <h3>🏆 ТОП ИГРОКОВ</h3>
             <div id="leaderboardList" class="leaderboard-list">Загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
@@ -603,6 +806,13 @@ async def mini_app(user_id: int = 1):
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        
+        // Адаптация под тему Telegram
+        if (tg.colorScheme === 'dark') {{
+            document.body.style.background = 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)';
+        }} else {{
+            document.body.style.background = 'linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%)';
+        }}
         
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
         let clicks = {stats["clicks"]};
@@ -661,7 +871,8 @@ async def mini_app(user_id: int = 1):
                     const player = data.leaderboard[i];
                     const div = document.createElement('div');
                     div.className = 'leaderboard-item';
-                    div.innerHTML = '<span>' + (i+1) + '. Пользователь ' + player.user_id + '</span><span>' + player.clicks + ' кликов</span>';
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '📊';
+                    div.innerHTML = '<span>' + medal + ' ' + (i+1) + '. Пользователь ' + player.user_id + '</span><span>' + player.clicks + ' кликов</span>';
                     leaderboardList.appendChild(div);
                 }}
             }} catch(e) {{ console.error(e); }}
@@ -680,9 +891,9 @@ async def mini_app(user_id: int = 1):
                     div.innerHTML = 
                         '<div class="achievement-info">' +
                             '<span class="achievement-emoji">' + emoji + '</span>' +
-                            '<div><div class="achievement-name">' + ach.name + '</div><div class="achievement-desc">' + ach.description + '</div></div>' +
+                            '<div><div class="achievement-name">' + ach.name + '</div><div class="achievement-desc">' + ach.description + ' | Награда: +' + ach.reward_gems + '💎 +' + ach.reward_clicks + '💰</div></div>' +
                         '</div>' +
-                        (ach.completed ? '<span class="achievement-desc">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>');
+                        (ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>');
                     achievementsList.appendChild(div);
                 }}
             }} catch(e) {{ console.error(e); }}
@@ -701,7 +912,7 @@ async def mini_app(user_id: int = 1):
                         div.innerHTML = 
                             '<div class="skin-info">' +
                                 '<span class="skin-emoji">' + skin.emoji + '</span>' +
-                                '<div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе (ЭКИПИРОВАН)</div></div>' +
+                                '<div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе ✅ ЭКИПИРОВАН</div></div>' +
                             '</div>';
                     }} else if (skin.owned) {{
                         div.innerHTML = 
