@@ -913,4 +913,4 @@ async def mini_app(user_id: int = 1):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)ы
+    uvicorn.run(app, host="0.0.0.0", port=port)
