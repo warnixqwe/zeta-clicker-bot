@@ -15,19 +15,32 @@ class ClickData(BaseModel):
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def get_user_stats(user_id: int):
+    """Возвращает простой словарь с числами и строками"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, level, tap_power, current_skin FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
+    
     if result:
+        # Принудительно преобразуем всё в простые типы
         return {
-            "clicks": result[0],
-            "level": result[1],
-            "tap_power": result[2],
-            "skin": result[3] if result[3] else "🦆"
+            "clicks": int(result[0]),
+            "level": int(result[1]),
+            "tap_power": int(result[2]),
+            "skin": str(result[3]) if result[3] else "🦆"
         }
-    return {"clicks": 0, "level": 1, "tap_power": 1, "skin": "🦆"}
+    else:
+        # Создаём пользователя, если его нет
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (user_id, clicks, level, tap_power, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, 0, 1, 1, "🦆", 0, 0)
+        )
+        conn.commit()
+        conn.close()
+        return {"clicks": 0, "level": 1, "tap_power": 1, "skin": "🦆"}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -44,15 +57,17 @@ def update_clicks(user_id: int, increment: int):
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(request: Request, user_id: int = 1):
     stats = get_user_stats(user_id)
+    
+    # Явно передаём каждый параметр, никаких словарей внутри словаря
     return templates.TemplateResponse(
         "game.html",
         {
             "request": request,
             "user_id": user_id,
-            "clicks": int(stats["clicks"]),
-            "level": int(stats["level"]),
-            "tap_power": int(stats["tap_power"]),
-            "skin": str(stats["skin"])
+            "clicks": stats["clicks"],
+            "level": stats["level"],
+            "tap_power": stats["tap_power"],
+            "skin": stats["skin"]
         }
     )
 
