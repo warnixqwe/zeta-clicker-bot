@@ -43,7 +43,7 @@ async def cmd_start(message: types.Message):
 @dp.message(Command("game"))
 async def cmd_game(message: types.Message):
     user_id = message.from_user.id
-    base_url = "https://zeta-clicker-bot-2.up.railway.app"
+    base_url = "https://zeta-clicker-bot-production-3a3b.up.railway.app"
     web_app_url = f"{base_url}/?user_id={user_id}"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
