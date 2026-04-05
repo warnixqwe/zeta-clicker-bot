@@ -1,6 +1,6 @@
 import os
-import random
 import asyncpg
+import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
