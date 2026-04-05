@@ -7,7 +7,6 @@ import uvicorn
 
 app = FastAPI()
 
-from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(HTTPSRedirectMiddleware)
