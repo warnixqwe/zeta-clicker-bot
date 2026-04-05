@@ -99,10 +99,6 @@ async def upgrade_tap(user_id: int):
         return {"success": True, "new_tap_power": new_tap_power}
     return {"success": False, "need": price}
 
-    @app.get("/test")
-async def test():
-    return {"status": "ok", "message": "Сервер работает"}
-
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
     return get_user_stats(user_id)
@@ -110,6 +106,10 @@ async def get_stats(user_id: int):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/test")
+async def test():
+    return {"status": "ok", "message": "Сервер работает"}
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
