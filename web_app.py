@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import random
-import asyncio
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -175,7 +174,6 @@ def init_db():
             (case_id, "gems", 10, "10 алмазов 💎", 10),
             (case_id, "gems", 25, "25 алмазов 💎", 5),
             (case_id, "booster", 1, "x2 клика (1 час)", 10),
-            (case_id, "booster", 3, "Автокликер (10 мин)", 8),
             (case_id, "skin", 4, "Утка-призрак 👻", 4),
             (case_id, "skin", 5, "Дьявольская утка 😈", 3),
         ])
@@ -185,7 +183,6 @@ def init_db():
         cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
             ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
             ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
-            ("Автокликер", "🤖", "Автоматически кликает 5 раз в секунду (10 минут)", "auto_click", 5, 10, 8000),
         ])
     
     cursor.execute("SELECT COUNT(*) FROM achievements")
@@ -203,24 +200,6 @@ def init_db():
     conn.close()
 
 init_db()
-
-# Словарь для хранения активных задач автокликера
-auto_click_tasks = {}
-
-async def auto_click_worker(user_id: int, tap_power: int, duration_minutes: int):
-    """Фоновая задача для автокликера"""
-    end_time = datetime.now() + timedelta(minutes=duration_minutes)
-    clicks_per_second = 5
-    interval = 1.0 / clicks_per_second
-    
-    while datetime.now() < end_time:
-        update_clicks(user_id, tap_power)
-        stats = get_user_stats(user_id)
-        await asyncio.sleep(interval)
-    
-    # Удаляем задачу из словаря
-    if user_id in auto_click_tasks:
-        del auto_click_tasks[user_id]
 
 def get_user_stats(user_id: int, username: str = None):
     conn = sqlite3.connect(DB_PATH)
@@ -473,7 +452,7 @@ async def open_case(user_id: int, case_id: int = 1):
         elif reward_type == "gems":
             cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (reward_value, user_id))
         elif reward_type == "booster":
-            expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60 if reward_value == 2 else 10)
+            expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60)
             cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
                            (user_id, reward_value, expires_at.isoformat()))
         elif reward_type == "skin":
@@ -527,13 +506,6 @@ async def buy_booster(user_id: int, booster_id: int):
         if effect_type == "energy":
             new_energy = min(stats["energy"] + int(effect_value), 1000)
             cursor.execute("UPDATE users SET energy = ? WHERE user_id = ?", (new_energy, user_id))
-        elif effect_type == "auto_click":
-            # Запускаем автокликер в фоне
-            if user_id in auto_click_tasks:
-                # Останавливаем старый, если есть
-                pass
-            task = asyncio.create_task(auto_click_worker(user_id, stats["tap_power"], duration))
-            auto_click_tasks[user_id] = task
         conn.commit()
         conn.close()
         return {"success": True, "booster_name": booster_name, "booster_emoji": booster_emoji}
