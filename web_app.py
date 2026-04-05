@@ -705,7 +705,7 @@ async def mini_app(user_id: int = 1, username: str = None):
             if (screenName === 'leaderboardScreen') loadLeaderboard();
         }}
         
-        function updateUI() {{
+        function updateUI() {
             document.getElementById('clicksValue').innerText = clicks;
             document.getElementById('levelValue').innerText = level;
             document.getElementById('tapPowerValue').innerText = '+' + tapPower;
@@ -713,7 +713,7 @@ async def mini_app(user_id: int = 1, username: str = None):
             document.getElementById('gemsValue').innerText = gems;
             document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
-        }}
+        }
         
         async function loadStats() {{
             try {{
@@ -908,14 +908,15 @@ async def mini_app(user_id: int = 1, username: str = None):
             }}
         }}
         
-        async function sendClick() {{
-            try {{
-                const res = await fetch('/api/click', {{
+        async function sendClick() {
+             try {
+                const res = await fetch('/api/click', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ user_id: userId, clicks: tapPower }})
-                }});
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, clicks: tapPower })
+                });
                 const data = await res.json();
+                console.log('Click response:', data);  // Отладка
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
@@ -923,8 +924,8 @@ async def mini_app(user_id: int = 1, username: str = None):
                 energy = data.energy;
                 gems = data.gems;
                 updateUI();
-            }} catch(e) {{ console.error(e); }}
-        }}
+            } catch(e) { console.error('Click error:', e); }
+        }
         
         function showFloatingNumber(x, y, value) {{
             const el = document.createElement('div');
