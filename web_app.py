@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+import time
 
 app = FastAPI()
 
@@ -24,8 +25,15 @@ class ClickData(BaseModel):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
+def get_db():
+    """Возвращает соединение с БД с таймаутом и WAL режимом"""
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -202,14 +210,14 @@ def init_db():
 init_db()
 
 def get_user_stats(user_id: int, username: str = None):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems, username FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
         if username and result[9] != username:
-            conn = sqlite3.connect(DB_PATH)
+            conn = get_db()
             cursor = conn.cursor()
             cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
             conn.commit()
@@ -221,7 +229,7 @@ def get_user_stats(user_id: int, username: str = None):
             "username": result[9] or str(user_id)
         }
     else:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                        (user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0))
@@ -230,31 +238,49 @@ def get_user_stats(user_id: int, username: str = None):
         return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0, "username": username or str(user_id)}
 
 def update_clicks(user_id: int, increment: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT clicks, total_clicks, level, energy FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    if result:
-        new_clicks = result[0] + increment
-        new_total = result[1] + increment
-        new_energy = result[3] - 1 if result[3] > 0 else 0
-        new_level = 1 + new_total // 100
-        cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ?, energy = ? WHERE user_id = ?",
-                       (new_clicks, new_total, new_level, new_energy, user_id))
-        conn.commit()
-    conn.close()
+    for attempt in range(3):
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT clicks, total_clicks, level, energy FROM users WHERE user_id = ?", (user_id,))
+            result = cursor.fetchone()
+            if result:
+                new_clicks = result[0] + increment
+                new_total = result[1] + increment
+                new_energy = result[3] - 1 if result[3] > 0 else 0
+                new_level = 1 + new_total // 100
+                cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ?, energy = ? WHERE user_id = ?",
+                               (new_clicks, new_total, new_level, new_energy, user_id))
+                conn.commit()
+            conn.close()
+            return True
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e) and attempt < 2:
+                time.sleep(0.1)
+                continue
+            raise e
+    return False
 
 def add_gems(user_id: int, amount: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
-    gems = cursor.fetchone()[0]
-    cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (gems + amount, user_id))
-    conn.commit()
-    conn.close()
+    for attempt in range(3):
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
+            gems = cursor.fetchone()[0]
+            cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (gems + amount, user_id))
+            conn.commit()
+            conn.close()
+            return True
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e) and attempt < 2:
+                time.sleep(0.1)
+                continue
+            raise e
+    return False
 
 def get_active_boosters(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     now = datetime.now().isoformat()
     cursor.execute("""
@@ -278,7 +304,7 @@ def get_booster_multiplier(user_id: int):
     return multiplier
 
 def check_achievements(user_id: int, condition_type: str, current_value: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, condition_value, reward_gems, reward_clicks FROM achievements WHERE condition_type = ?", (condition_type,))
     achievements = cursor.fetchall()
@@ -314,7 +340,7 @@ async def upgrade_tap(user_id: int):
     stats = get_user_stats(user_id)
     price = stats["tap_power"] * 100
     if stats["clicks"] >= price:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         new_clicks = stats["clicks"] - price
         new_tap_power = stats["tap_power"] + 1
@@ -329,7 +355,7 @@ async def upgrade_passive(user_id: int):
     stats = get_user_stats(user_id)
     price = 500 + stats["passive_income"] * 100
     if stats["clicks"] >= price:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         new_clicks = stats["clicks"] - price
         new_passive = stats["passive_income"] + 5
@@ -343,7 +369,7 @@ async def upgrade_passive(user_id: int):
 async def collect_passive(user_id: int):
     stats = get_user_stats(user_id)
     if stats["passive_income"] > 0:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         new_clicks = stats["clicks"] + stats["passive_income"]
         cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
@@ -361,7 +387,7 @@ async def claim_daily(user_id: int):
         return {"success": False, "message": "Уже забирал сегодня"}
     streak = stats["daily_streak"] + 1 if last_date == today - timedelta(days=1) else 1
     bonus = min(100 + streak * 50, 600)
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET clicks = clicks + ?, daily_streak = ?, last_daily = ? WHERE user_id = ?",
                    (bonus, streak, today.isoformat(), user_id))
@@ -371,7 +397,7 @@ async def claim_daily(user_id: int):
 
 @app.post("/api/buy_skin")
 async def buy_skin(user_id: int, skin_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT name, emoji, price_clicks FROM skins WHERE id = ?", (skin_id,))
     skin = cursor.fetchone()
@@ -395,7 +421,7 @@ async def buy_skin(user_id: int, skin_id: int):
 
 @app.post("/api/equip_skin")
 async def equip_skin(user_id: int, skin_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
     if not cursor.fetchone():
@@ -410,7 +436,7 @@ async def equip_skin(user_id: int, skin_id: int):
 
 @app.get("/api/get_skins")
 async def get_skins(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
     owned = [row[0] for row in cursor.fetchall()]
@@ -423,7 +449,7 @@ async def get_skins(user_id: int):
 
 @app.post("/api/open_case")
 async def open_case(user_id: int, case_id: int = 1):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT name, emoji, price_clicks FROM cases WHERE id = ?", (case_id,))
     case = cursor.fetchone()
@@ -468,7 +494,7 @@ async def open_case(user_id: int, case_id: int = 1):
 
 @app.get("/api/get_cases")
 async def get_cases():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, emoji, price_clicks FROM cases")
     cases = cursor.fetchall()
@@ -477,7 +503,7 @@ async def get_cases():
 
 @app.get("/api/get_boosters")
 async def get_boosters(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, emoji, description, price_clicks FROM boosters")
     shop_boosters = cursor.fetchall()
@@ -488,7 +514,7 @@ async def get_boosters(user_id: int):
 
 @app.post("/api/buy_booster")
 async def buy_booster(user_id: int, booster_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT name, emoji, price_clicks, duration_minutes, effect_type, effect_value FROM boosters WHERE id = ?", (booster_id,))
     booster = cursor.fetchone()
@@ -514,7 +540,7 @@ async def buy_booster(user_id: int, booster_id: int):
 
 @app.get("/api/get_achievements")
 async def get_achievements(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
     achievements = cursor.fetchall()
@@ -533,7 +559,7 @@ async def get_achievements(user_id: int):
 
 @app.get("/api/get_leaderboard")
 async def get_leaderboard(limit: int = 10):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, username, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
     result = cursor.fetchall()
