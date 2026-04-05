@@ -26,6 +26,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL)
+    
+    # Создание таблиц (без изменений)
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY,
@@ -118,41 +120,53 @@ async def init_db():
         )
     """)
     
-    # Добавляем начальные данные
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-                       ('Обычная утка', '🦆', 0, 0))
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-                       ('Золотая утка', '🌟', 5000, 2))
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-                       ('Киберутка', '🤖', 15000, 5))
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-                       ('Утка-призрак', '👻', 30000, 10))
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-                       ('Дьявольская утка', '😈', 50000, 15))
+        # Исправленные INSERT (без ON CONFLICT, так как таблица новая)
+    # Сначала проверяем, есть ли данные
+    count = await conn.fetchval("SELECT COUNT(*) FROM skins")
+    if count == 0:
+        await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4)",
+                           'Обычная утка', '🦆', 0, 0)
+        await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4)",
+                           'Золотая утка', '🌟', 5000, 2)
+        await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4)",
+                           'Киберутка', '🤖', 15000, 5)
+        await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4)",
+                           'Утка-призрак', '👻', 30000, 10)
+        await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4)",
+                           'Дьявольская утка', '😈', 50000, 15)
     
-    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Обычный кейс", "📦", 1000))
-    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Серебряный кейс", "🥈", 5000))
-    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Алмазный кейс", "💎", 15000))
+    count = await conn.fetchval("SELECT COUNT(*) FROM cases")
+    if count == 0:
+        await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3)",
+                           'Обычный кейс', '📦', 1000)
+        await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3)",
+                           'Серебряный кейс', '🥈', 5000)
+        await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3)",
+                           'Алмазный кейс', '💎', 15000)
     
-    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
-                       ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000))
-    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
-                       ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000))
+    count = await conn.fetchval("SELECT COUNT(*) FROM boosters")
+    if count == 0:
+        await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                           'x2 Клики', '⚡', 'Удваивает силу клика на 30 минут', 'tap_multiplier', 2, 30, 5000)
+        await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                           'Энергетик', '🔋', 'Восстанавливает 500 энергии', 'energy', 500, 0, 2000)
     
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Везунчик", "Открыть 5 кейсов", "cases", 5, 3, 3000))
-    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                       ("Азартный", "Открыть 20 кейсов", "cases", 20, 10, 10000))
+    count = await conn.fetchval("SELECT COUNT(*) FROM achievements")
+    if count == 0:
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Новичок', 'Накликать 100 кликов', 'clicks', 100, 1, 500)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Серебряный палец', 'Накликать 1000 кликов', 'clicks', 1000, 2, 2000)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Золотой палец', 'Накликать 10000 кликов', 'clicks', 10000, 5, 10000)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Коллекционер', 'Купить 1 скин', 'skins', 1, 1, 500)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Магнат', 'Купить 3 скина', 'skins', 3, 3, 2000)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Везунчик', 'Открыть 5 кейсов', 'cases', 5, 3, 3000)
+        await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6)",
+                           'Азартный', 'Открыть 20 кейсов', 'cases', 20, 10, 10000)
     
     await conn.close()
 
