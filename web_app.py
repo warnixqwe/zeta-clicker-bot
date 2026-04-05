@@ -4,12 +4,11 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(HTTPSRedirectMiddleware)
+# CORS — разрешаем всё (нужно для Mini App)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -105,10 +104,6 @@ async def get_stats(user_id: int):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-@app.get("/test")
-async def test():
-    return {"status": "ok", "message": "Сервер работает"}
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
