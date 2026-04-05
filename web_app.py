@@ -360,10 +360,12 @@ async def open_case(user_id: int, case_id: int = 1):
     if not case:
         await conn.close()
         return {"success": False, "message": "Кейс не найден"}
+    
     stats = await get_user_stats(user_id)
     if stats["clicks"] >= case['price_clicks']:
         new_clicks = stats["clicks"] - case['price_clicks']
         await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
+        
         rewards = await conn.fetch("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = $1", case_id)
         total_chance = sum(r['chance'] for r in rewards)
         rand = random.randint(1, total_chance)
@@ -374,6 +376,7 @@ async def open_case(user_id: int, case_id: int = 1):
             if rand <= cumulative:
                 selected = reward
                 break
+        
         if selected['reward_type'] == "clicks":
             await conn.execute("UPDATE users SET clicks = clicks + $1 WHERE user_id = $2", selected['reward_value'], user_id)
         elif selected['reward_type'] == "gems":
@@ -381,13 +384,15 @@ async def open_case(user_id: int, case_id: int = 1):
         elif selected['reward_type'] == "booster":
             expires_at = datetime.now() + timedelta(minutes=30)
             await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                               user_id, selected['reward_value'], expires_at
+                               user_id, selected['reward_value'], expires_at.isoformat())
         elif selected['reward_type'] == "skin":
             await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected['reward_value'])
+        
         cases_opened = await conn.fetchval("SELECT COUNT(*) FROM user_achievements WHERE user_id = $1 AND achievement_id IN (6,7) AND completed = 1", user_id)
         await conn.close()
         await check_achievements(user_id, "cases", cases_opened + 1)
         return {"success": True, "reward_text": selected['reward_text'], "case_emoji": case['emoji']}
+    
     await conn.close()
     return {"success": False, "need": case['price_clicks']}
 
