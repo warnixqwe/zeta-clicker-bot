@@ -96,6 +96,27 @@ def init_db():
             PRIMARY KEY (user_id, booster_id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS achievements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            description TEXT,
+            condition_type TEXT,
+            condition_value INTEGER,
+            reward_gems INTEGER,
+            reward_clicks INTEGER
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id INTEGER,
+            achievement_id INTEGER,
+            progress INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            completed_at TIMESTAMP DEFAULT NULL,
+            PRIMARY KEY (user_id, achievement_id)
+        )
+    """)
     conn.commit()
     
     cursor.execute("SELECT COUNT(*) FROM skins")
@@ -128,6 +149,18 @@ def init_db():
         cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
             ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
             ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
+        ])
+    
+    cursor.execute("SELECT COUNT(*) FROM achievements")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES (?, ?, ?, ?, ?, ?)", [
+            ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500),
+            ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000),
+            ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000),
+            ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500),
+            ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000),
+            ("Везунчик", "Открыть 5 кейсов", "cases", 5, 3, 3000),
+            ("Азартный", "Открыть 20 кейсов", "cases", 20, 10, 10000),
         ])
     conn.commit()
     conn.close()
@@ -203,12 +236,33 @@ def get_booster_multiplier(user_id: int):
             multiplier *= b["effect_value"]
     return multiplier
 
+def check_achievements(user_id: int, condition_type: str, current_value: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, condition_value, reward_gems, reward_clicks FROM achievements WHERE condition_type = ?", (condition_type,))
+    achievements = cursor.fetchall()
+    for ach in achievements:
+        ach_id, ach_value, reward_gems, reward_clicks = ach
+        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
+        result = cursor.fetchone()
+        if not result or result[0] == 0:
+            if current_value >= ach_value:
+                cursor.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES (?, ?, ?, ?, ?)",
+                               (user_id, ach_id, ach_value, 1, datetime.now().isoformat()))
+                if reward_gems > 0:
+                    add_gems(user_id, reward_gems)
+                if reward_clicks > 0:
+                    cursor.execute("UPDATE users SET clicks = clicks + ? WHERE user_id = ?", (reward_clicks, user_id))
+    conn.commit()
+    conn.close()
+
 @app.post("/api/click")
 async def handle_click(data: ClickData):
     multiplier = get_booster_multiplier(data.user_id)
     final_clicks = int(data.clicks * multiplier)
     update_clicks(data.user_id, final_clicks)
     stats = get_user_stats(data.user_id)
+    check_achievements(data.user_id, "clicks", stats["total_clicks"])
     return {
         "clicks": stats["clicks"], "level": stats["level"], "energy": stats["energy"],
         "tap_power": stats["tap_power"], "passive_income": stats["passive_income"], "gems": stats["gems"]
@@ -289,8 +343,11 @@ async def buy_skin(user_id: int, skin_id: int):
         new_clicks = stats["clicks"] - price
         cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
         cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
+        cursor.execute("SELECT COUNT(*) FROM user_skins WHERE user_id = ?", (user_id,))
+        skins_count = cursor.fetchone()[0]
         conn.commit()
         conn.close()
+        check_achievements(user_id, "skins", skins_count)
         return {"success": True, "skin_name": skin_name, "skin_emoji": skin_emoji}
     conn.close()
     return {"success": False, "need": price}
@@ -359,8 +416,11 @@ async def open_case(user_id: int, case_id: int = 1):
                            (user_id, reward_value, expires_at.isoformat()))
         elif reward_type == "skin":
             cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
+        cursor.execute("SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id IN (6,7) AND completed = 1", (user_id,))
+        cases_opened = cursor.fetchone()[0]
         conn.commit()
         conn.close()
+        check_achievements(user_id, "cases", cases_opened + 1)
         return {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
     conn.close()
     return {"success": False, "need": price}
@@ -411,6 +471,34 @@ async def buy_booster(user_id: int, booster_id: int):
     conn.close()
     return {"success": False, "need": price}
 
+@app.get("/api/get_achievements")
+async def get_achievements(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
+    achievements = cursor.fetchall()
+    result = []
+    for ach in achievements:
+        ach_id, name, desc, condition, reward_gems, reward_clicks = ach
+        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
+        completed = cursor.fetchone()
+        result.append({
+            "id": ach_id, "name": name, "description": desc, "condition": condition,
+            "reward_gems": reward_gems, "reward_clicks": reward_clicks,
+            "completed": completed[0] if completed else 0
+        })
+    conn.close()
+    return {"achievements": result}
+
+@app.get("/api/get_leaderboard")
+async def get_leaderboard(limit: int = 10):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
+    result = cursor.fetchall()
+    conn.close()
+    return {"leaderboard": [{"user_id": r[0], "clicks": r[1]} for r in result]}
+
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
     stats = get_user_stats(user_id)
@@ -453,14 +541,15 @@ async def mini_app(user_id: int = 1):
         .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 6px; transition: width 0.2s; }}
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
-        .skin-list, .booster-list, .case-list {{ margin: 20px 0; }}
-        .skin-item, .booster-item, .case-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
-        .skin-info, .booster-info {{ display: flex; align-items: center; gap: 12px; }}
-        .skin-emoji, .booster-emoji, .case-emoji {{ font-size: 40px; }}
-        .skin-name, .booster-name {{ font-size: 16px; font-weight: bold; }}
-        .skin-price, .booster-price, .case-price {{ font-size: 12px; color: #ffd700; }}
+        .skin-list, .booster-list, .case-list, .achievement-list, .leaderboard-list {{ margin: 20px 0; }}
+        .skin-item, .booster-item, .case-item, .achievement-item, .leaderboard-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info, .booster-info, .achievement-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji, .booster-emoji, .case-emoji, .achievement-emoji {{ font-size: 40px; }}
+        .skin-name, .booster-name, .achievement-name {{ font-size: 16px; font-weight: bold; }}
+        .skin-price, .booster-price, .case-price, .achievement-desc {{ font-size: 12px; color: #ffd700; }}
         .skin-buy-btn, .booster-buy-btn, .case-open-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
         .case-open-btn {{ background: linear-gradient(135deg, #ffd700, #ff8c00); color: #333; font-weight: bold; }}
+        .achievement-completed {{ background: #4caf50; color: white; border-radius: 12px; padding: 4px 12px; font-size: 12px; }}
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
     </style>
 </head>
@@ -485,6 +574,8 @@ async def mini_app(user_id: int = 1):
                 <button class="btn" id="openShopBtn">👕 Магазин</button>
                 <button class="btn" id="openCasesBtn">📦 Кейсы</button>
                 <button class="btn" id="openBoostersBtn">⚡ Бустеры</button>
+                <button class="btn" id="openAchievementsBtn">🏆 Достижения</button>
+                <button class="btn" id="openLeaderboardBtn">🏆 Топ</button>
             </div>
         </div>
         
@@ -506,6 +597,18 @@ async def mini_app(user_id: int = 1):
             <div id="shopBoostersList" class="booster-list">Доступные бустеры: загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
+        
+        <div id="achievementsScreen" class="screen">
+            <h3 style="color: white; text-align: center;">🏆 ДОСТИЖЕНИЯ</h3>
+            <div id="achievementsList" class="achievement-list">Загрузка...</div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
+        
+        <div id="leaderboardScreen" class="screen">
+            <h3 style="color: white; text-align: center;">🏆 ТОП ИГРОКОВ</h3>
+            <div id="leaderboardList" class="leaderboard-list">Загрузка...</div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
     </div>
 
     <script>
@@ -524,12 +627,14 @@ async def mini_app(user_id: int = 1):
         let currentSkin = "{stats["skin"]}";
         
         function showScreen(screenName) {{
-            const screens = ['mainScreen', 'shopScreen', 'casesScreen', 'boostersScreen'];
+            const screens = ['mainScreen', 'shopScreen', 'casesScreen', 'boostersScreen', 'achievementsScreen', 'leaderboardScreen'];
             screens.forEach(s => document.getElementById(s).classList.remove('active'));
             document.getElementById(screenName).classList.add('active');
             if (screenName === 'shopScreen') loadSkins();
             if (screenName === 'casesScreen') loadCases();
             if (screenName === 'boostersScreen') loadBoosters();
+            if (screenName === 'achievementsScreen') loadAchievements();
+            if (screenName === 'leaderboardScreen') loadLeaderboard();
         }}
         
         function updateUI() {{
@@ -555,6 +660,44 @@ async def mini_app(user_id: int = 1):
                 currentSkin = data.skin;
                 updateUI();
                 document.getElementById('duck').innerText = currentSkin;
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function loadLeaderboard() {{
+            try {{
+                const res = await fetch('/api/get_leaderboard?limit=10');
+                const data = await res.json();
+                const leaderboardList = document.getElementById('leaderboardList');
+                leaderboardList.innerHTML = '';
+                for (let i = 0; i < data.leaderboard.length; i++) {{
+                    const player = data.leaderboard[i];
+                    const div = document.createElement('div');
+                    div.className = 'leaderboard-item';
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '📊';
+                    div.innerHTML = '<span>' + medal + ' ' + (i+1) + '. Пользователь ' + player.user_id + '</span><span>' + player.clicks + ' кликов</span>';
+                    leaderboardList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function loadAchievements() {{
+            try {{
+                const res = await fetch('/api/get_achievements?user_id=' + userId);
+                const data = await res.json();
+                const achievementsList = document.getElementById('achievementsList');
+                achievementsList.innerHTML = '';
+                for (const ach of data.achievements) {{
+                    const div = document.createElement('div');
+                    div.className = 'achievement-item';
+                    let emoji = ach.completed ? '🏆' : '🔒';
+                    div.innerHTML = 
+                        '<div class="achievement-info">' +
+                            '<span class="achievement-emoji">' + emoji + '</span>' +
+                            '<div><div class="achievement-name">' + ach.name + '</div><div class="achievement-desc">' + ach.description + ' | Награда: +' + ach.reward_gems + '💎 +' + ach.reward_clicks + '💰</div></div>' +
+                        '</div>' +
+                        (ach.completed ? '<span class="achievement-completed">✅ ВЫПОЛНЕНО</span>' : '<span class="achievement-desc">📋 Не выполнено</span>');
+                    achievementsList.appendChild(div);
+                }}
             }} catch(e) {{ console.error(e); }}
         }}
         
@@ -791,6 +934,8 @@ async def mini_app(user_id: int = 1):
         document.getElementById('openShopBtn').onclick = () => showScreen('shopScreen');
         document.getElementById('openCasesBtn').onclick = () => showScreen('casesScreen');
         document.getElementById('openBoostersBtn').onclick = () => showScreen('boostersScreen');
+        document.getElementById('openAchievementsBtn').onclick = () => showScreen('achievementsScreen');
+        document.getElementById('openLeaderboardBtn').onclick = () => showScreen('leaderboardScreen');
         
         setInterval(() => {{
             if (energy < maxEnergy) {{
