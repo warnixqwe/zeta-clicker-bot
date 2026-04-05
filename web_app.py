@@ -685,12 +685,12 @@ async def mini_app(user_id: int = 1, username: str = None):
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
         let username = tg.initDataUnsafe?.user?.username || null;
         
-        let clicks = parseInt('{stats["clicks"]}');
-        let level = parseInt('{stats["level"]}');
-        let tapPower = parseInt('{stats["tap_power"]}');
-        let passiveIncome = parseInt('{stats["passive_income"]}');
-        let energy = parseInt('{stats["energy"]}');
-        let gems = parseInt('{stats["gems"]}');
+        let clicks = {stats["clicks"]};
+        let level = {stats["level"]};
+        let tapPower = {stats["tap_power"]};
+        let passiveIncome = {stats["passive_income"]};
+        let energy = {stats["energy"]};
+        let gems = {stats["gems"]};
         let maxEnergy = 1000;
         let currentSkin = "{stats["skin"]}";
         
@@ -908,15 +908,14 @@ async def mini_app(user_id: int = 1, username: str = None):
             }}
         }}
         
-        async function sendClick() {
-             try {
-                const res = await fetch('/api/click', {
+        async function sendClick() {{
+            try {{
+                const res = await fetch('/api/click', {{
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, clicks: tapPower })
-                });
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ user_id: userId, clicks: tapPower }})
+                }});
                 const data = await res.json();
-                console.log('Click response:', data);  // Отладка
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
@@ -924,8 +923,8 @@ async def mini_app(user_id: int = 1, username: str = None):
                 energy = data.energy;
                 gems = data.gems;
                 updateUI();
-            } catch(e) { console.error('Click error:', e); }
-        }
+            }} catch(e) {{ console.error(e); }}
+        }}
         
         function showFloatingNumber(x, y, value) {{
             const el = document.createElement('div');
