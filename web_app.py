@@ -211,7 +211,7 @@ async def add_gems(user_id: int, amount: int):
 
 async def get_active_boosters(user_id: int):
     conn = await asyncpg.connect(DATABASE_URL)
-    now = datetime.now().isoformat()
+    now = datetime.now()  # ← объект datetime, а не строка!
     result = await conn.fetch("""
         SELECT b.id, b.name, b.emoji, b.description, b.effect_type, b.effect_value, b.duration_minutes,
                EXTRACT(EPOCH FROM (ub.expires_at - $1::timestamp)) / 60 as minutes_left
@@ -238,7 +238,7 @@ async def check_achievements(user_id: int, condition_type: str, current_value: i
         completed = await conn.fetchval("SELECT completed FROM user_achievements WHERE user_id = $1 AND achievement_id = $2", user_id, ach['id'])
         if not completed and current_value >= ach['condition_value']:
             await conn.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES ($1, $2, $3, $4, $5)",
-                               user_id, ach['id'], ach['condition_value'], 1, datetime.now().isoformat())
+                               user_id, ach['id'], ach['condition_value'], 1, datetime.now())
             if ach['reward_gems'] > 0:
                 await add_gems(user_id, ach['reward_gems'])
             if ach['reward_clicks'] > 0:
@@ -309,7 +309,7 @@ async def claim_daily(user_id: int):
     bonus = min(100 + streak * 50, 600)
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute("UPDATE users SET clicks = clicks + $1, daily_streak = $2, last_daily = $3 WHERE user_id = $4",
-                       bonus, streak, today.isoformat(), user_id)
+                       bonus, streak, today, user_id)
     await conn.close()
     return {"success": True, "bonus": bonus, "streak": streak}
 
@@ -381,7 +381,7 @@ async def open_case(user_id: int, case_id: int = 1):
         elif selected['reward_type'] == "booster":
             expires_at = datetime.now() + timedelta(minutes=30)
             await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                               user_id, selected['reward_value'], expires_at.isoformat())
+                               user_id, selected['reward_value'], expires_at
         elif selected['reward_type'] == "skin":
             await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected['reward_value'])
         cases_opened = await conn.fetchval("SELECT COUNT(*) FROM user_achievements WHERE user_id = $1 AND achievement_id IN (6,7) AND completed = 1", user_id)
@@ -420,7 +420,7 @@ async def buy_booster(user_id: int, booster_id: int):
         await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
         expires_at = datetime.now() + timedelta(minutes=booster['duration_minutes'])
         await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                           user_id, booster_id, expires_at.isoformat())
+                           user_id, booster_id, expires_at
         if booster['effect_type'] == "energy":
             new_energy = min(stats["energy"] + int(booster['effect_value']), 1000)
             await conn.execute("UPDATE users SET energy = $1 WHERE user_id = $2", new_energy, user_id)
