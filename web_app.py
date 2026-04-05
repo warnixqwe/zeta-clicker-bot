@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -32,8 +33,11 @@ def init_db():
             level INTEGER DEFAULT 1,
             energy INTEGER DEFAULT 1000,
             tap_power INTEGER DEFAULT 1,
+            passive_income INTEGER DEFAULT 0,
             current_skin TEXT DEFAULT '🦆',
-            total_clicks INTEGER DEFAULT 0
+            total_clicks INTEGER DEFAULT 0,
+            last_daily TIMESTAMP DEFAULT NULL,
+            daily_streak INTEGER DEFAULT 0
         )
     """)
     cursor.execute("""
@@ -71,22 +75,23 @@ init_db()
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, energy, tap_power, current_skin, total_clicks FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
         return {
             "clicks": result[0], "level": result[1], "energy": result[2],
-            "tap_power": result[3], "skin": result[4], "total_clicks": result[5]
+            "tap_power": result[3], "passive_income": result[4], "skin": result[5],
+            "total_clicks": result[6], "daily_streak": result[7]
         }
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, current_skin, total_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, 0, 1, 1000, 1, "🦆", 0))
+        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (user_id, 0, 1, 1000, 1, 0, "🦆", 0, 0))
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "skin": "🦆", "total_clicks": 0}
+        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -107,7 +112,10 @@ def update_clicks(user_id: int, increment: int):
 async def handle_click(data: ClickData):
     update_clicks(data.user_id, data.clicks)
     stats = get_user_stats(data.user_id)
-    return {"clicks": stats["clicks"], "level": stats["level"], "energy": stats["energy"], "tap_power": stats["tap_power"]}
+    return {
+        "clicks": stats["clicks"], "level": stats["level"], "energy": stats["energy"],
+        "tap_power": stats["tap_power"], "passive_income": stats["passive_income"]
+    }
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
@@ -123,6 +131,51 @@ async def upgrade_tap(user_id: int):
         conn.close()
         return {"success": True, "new_tap_power": new_tap_power}
     return {"success": False, "need": price}
+
+@app.post("/api/upgrade_passive")
+async def upgrade_passive(user_id: int):
+    stats = get_user_stats(user_id)
+    price = 500 + stats["passive_income"] * 100
+    if stats["clicks"] >= price:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        new_clicks = stats["clicks"] - price
+        new_passive = stats["passive_income"] + 5
+        cursor.execute("UPDATE users SET clicks = ?, passive_income = ? WHERE user_id = ?", (new_clicks, new_passive, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "new_passive": new_passive}
+    return {"success": False, "need": price}
+
+@app.post("/api/collect_passive")
+async def collect_passive(user_id: int):
+    stats = get_user_stats(user_id)
+    if stats["passive_income"] > 0:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        new_clicks = stats["clicks"] + stats["passive_income"]
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "earned": stats["passive_income"]}
+    return {"success": False, "message": "Нет пассивного дохода"}
+
+@app.post("/api/claim_daily")
+async def claim_daily(user_id: int):
+    stats = get_user_stats(user_id)
+    today = datetime.now().date()
+    last_date = datetime.fromisoformat(stats.get("last_daily", "")).date() if stats.get("last_daily") else None
+    if last_date == today:
+        return {"success": False, "message": "Уже забирал сегодня"}
+    streak = stats["daily_streak"] + 1 if last_date == today - timedelta(days=1) else 1
+    bonus = min(100 + streak * 50, 600)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET clicks = clicks + ?, daily_streak = ?, last_daily = ? WHERE user_id = ?",
+                   (bonus, streak, today.isoformat(), user_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "bonus": bonus, "streak": streak}
 
 @app.post("/api/buy_skin")
 async def buy_skin(user_id: int, skin_id: int):
@@ -229,13 +282,17 @@ async def mini_app(user_id: int = 1):
                 <div class="stat-row"><span class="stat-label">🦆 Уровень</span><span class="stat-value" id="levelValue">{stats["level"]}</span></div>
                 <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
                 <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
+                <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
                 <div class="stat-row"><span class="stat-label">⚡ Энергия</span><span class="stat-value" id="energyValue">{stats["energy"]}/1000</span></div>
             </div>
             <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
             <div class="duck-container"><div class="duck" id="duck">{stats["skin"]}</div></div>
             <div class="button-grid">
-                <button class="btn" id="upgradeBtn">💪 Улучшить тап</button>
-                <button class="btn" id="openShopBtn">👕 Магазин скинов</button>
+                <button class="btn" id="upgradeTapBtn">💪 Улучшить тап</button>
+                <button class="btn" id="upgradePassiveBtn">💰 Улучшить пассивку</button>
+                <button class="btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
+                <button class="btn" id="dailyBtn">🎁 Ежедневный</button>
+                <button class="btn" id="openShopBtn">👕 Магазин</button>
             </div>
         </div>
         
@@ -255,6 +312,7 @@ async def mini_app(user_id: int = 1):
         let clicks = {stats["clicks"]};
         let level = {stats["level"]};
         let tapPower = {stats["tap_power"]};
+        let passiveIncome = {stats["passive_income"]};
         let energy = {stats["energy"]};
         let maxEnergy = 1000;
         let currentSkin = "{stats["skin"]}";
@@ -270,6 +328,7 @@ async def mini_app(user_id: int = 1):
             document.getElementById('clicksValue').innerText = clicks;
             document.getElementById('levelValue').innerText = level;
             document.getElementById('tapPowerValue').innerText = '+' + tapPower;
+            document.getElementById('passiveValue').innerText = passiveIncome + '/час';
             document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
         }}
@@ -281,6 +340,7 @@ async def mini_app(user_id: int = 1):
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
+                passiveIncome = data.passive_income;
                 energy = data.energy;
                 currentSkin = data.skin;
                 updateUI();
@@ -356,6 +416,7 @@ async def mini_app(user_id: int = 1):
                 clicks = data.clicks;
                 level = data.level;
                 tapPower = data.tap_power;
+                passiveIncome = data.passive_income;
                 energy = data.energy;
                 updateUI();
             }} catch(e) {{ console.error(e); }}
@@ -385,7 +446,7 @@ async def mini_app(user_id: int = 1):
             await sendClick();
         }};
         
-        document.getElementById('upgradeBtn').onclick = async () => {{
+        document.getElementById('upgradeTapBtn').onclick = async () => {{
             const price = tapPower * 100;
             if (clicks >= price) {{
                 const res = await fetch('/api/upgrade_tap?user_id=' + userId, {{method: 'POST'}});
@@ -396,6 +457,44 @@ async def mini_app(user_id: int = 1):
                 }}
             }} else {{
                 tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + price + ' кликов', buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('upgradePassiveBtn').onclick = async () => {{
+            const price = 500 + passiveIncome * 100;
+            if (clicks >= price) {{
+                const res = await fetch('/api/upgrade_passive?user_id=' + userId, {{method: 'POST'}});
+                const data = await res.json();
+                if (data.success) {{
+                    tg.showPopup({{title: '✅ Пассивный доход улучшен!', message: 'Теперь +' + data.new_passive + '/час', buttons: [{{type: 'ok'}}]}});
+                    await loadStats();
+                }}
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + price + ' кликов', buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('collectPassiveBtn').onclick = async () => {{
+            if (passiveIncome > 0) {{
+                const res = await fetch('/api/collect_passive?user_id=' + userId, {{method: 'POST'}});
+                const data = await res.json();
+                if (data.success) {{
+                    tg.showPopup({{title: '💰 Получено!', message: '+' + data.earned + ' кликов!', buttons: [{{type: 'ok'}}]}});
+                    await loadStats();
+                }}
+            }} else {{
+                tg.showPopup({{title: '😴 Нет дохода', message: 'Сначала улучши пассивный доход', buttons: [{{type: 'ok'}}]}});
+            }}
+        }};
+        
+        document.getElementById('dailyBtn').onclick = async () => {{
+            const res = await fetch('/api/claim_daily?user_id=' + userId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '🎁 Бонус получен!', message: '+' + data.bonus + ' кликов! Серия: ' + data.streak, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '❌ Уже забирал', message: data.message, buttons: [{{type: 'ok'}}]}});
             }}
         }};
         
