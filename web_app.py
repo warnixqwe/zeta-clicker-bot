@@ -379,7 +379,7 @@ async def open_case(user_id: int, case_id: int = 1):
             await conn.execute("UPDATE users SET gems = gems + $1 WHERE user_id = $2", selected['reward_value'], user_id)
         elif selected['reward_type'] == "booster":
             expires_at = datetime.now() + timedelta(minutes=30)
-            await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",user_id, selected['reward_value'], expires_at.isoformat())
+            await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", user_id, selected['reward_value'], expires_at)
         elif selected['reward_type'] == "skin":
             await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected['reward_value'])
         
