@@ -705,7 +705,7 @@ async def mini_app(user_id: int = 1, username: str = None):
             if (screenName === 'leaderboardScreen') loadLeaderboard();
         }}
         
-        function updateUI() {
+        function updateUI() {{
             document.getElementById('clicksValue').innerText = clicks;
             document.getElementById('levelValue').innerText = level;
             document.getElementById('tapPowerValue').innerText = '+' + tapPower;
@@ -713,7 +713,7 @@ async def mini_app(user_id: int = 1, username: str = None):
             document.getElementById('gemsValue').innerText = gems;
             document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
-        }
+        }}
         
         async function loadStats() {{
             try {{
