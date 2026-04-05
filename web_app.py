@@ -26,7 +26,6 @@ class ClickData(BaseModel):
 DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def get_db():
-    """Возвращает соединение с БД с таймаутом и WAL режимом"""
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -686,12 +685,12 @@ async def mini_app(user_id: int = 1, username: str = None):
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
         let username = tg.initDataUnsafe?.user?.username || null;
         
-        let clicks = {stats["clicks"]};
-        let level = {stats["level"]};
-        let tapPower = {stats["tap_power"]};
-        let passiveIncome = {stats["passive_income"]};
-        let energy = {stats["energy"]};
-        let gems = {stats["gems"]};
+        let clicks = parseInt('{stats["clicks"]}');
+        let level = parseInt('{stats["level"]}');
+        let tapPower = parseInt('{stats["tap_power"]}');
+        let passiveIncome = parseInt('{stats["passive_income"]}');
+        let energy = parseInt('{stats["energy"]}');
+        let gems = parseInt('{stats["gems"]}');
         let maxEnergy = 1000;
         let currentSkin = "{stats["skin"]}";
         
