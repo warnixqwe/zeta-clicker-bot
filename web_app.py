@@ -1,13 +1,12 @@
 import os
-import sqlite3
 import random
+import asyncpg
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-import time
 
 app = FastAPI()
 
@@ -23,60 +22,53 @@ class ClickData(BaseModel):
     user_id: int
     clicks: int
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    return conn
-
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
+async def init_db():
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             username TEXT DEFAULT NULL,
-            clicks INTEGER DEFAULT 0,
+            clicks BIGINT DEFAULT 0,
             level INTEGER DEFAULT 1,
             energy INTEGER DEFAULT 1000,
             tap_power INTEGER DEFAULT 1,
             passive_income INTEGER DEFAULT 0,
             current_skin TEXT DEFAULT '🦆',
-            total_clicks INTEGER DEFAULT 0,
+            total_clicks BIGINT DEFAULT 0,
             last_daily TIMESTAMP DEFAULT NULL,
             daily_streak INTEGER DEFAULT 0,
             gems INTEGER DEFAULT 0
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS skins (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT,
             emoji TEXT,
             price_clicks INTEGER,
             tap_bonus INTEGER DEFAULT 0
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_skins (
-            user_id INTEGER,
+            user_id BIGINT,
             skin_id INTEGER,
             PRIMARY KEY (user_id, skin_id)
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS cases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT,
             emoji TEXT,
             price_clicks INTEGER
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS case_rewards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             case_id INTEGER,
             reward_type TEXT,
             reward_value INTEGER,
@@ -84,9 +76,9 @@ def init_db():
             chance INTEGER
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS boosters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT,
             emoji TEXT,
             description TEXT,
@@ -96,17 +88,17 @@ def init_db():
             price_clicks INTEGER
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_boosters (
-            user_id INTEGER,
+            user_id BIGINT,
             booster_id INTEGER,
             expires_at TIMESTAMP,
             PRIMARY KEY (user_id, booster_id)
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS achievements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT,
             description TEXT,
             condition_type TEXT,
@@ -115,9 +107,9 @@ def init_db():
             reward_clicks INTEGER
         )
     """)
-    cursor.execute("""
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS user_achievements (
-            user_id INTEGER,
+            user_id BIGINT,
             achievement_id INTEGER,
             progress INTEGER DEFAULT 0,
             completed INTEGER DEFAULT 0,
@@ -125,210 +117,131 @@ def init_db():
             PRIMARY KEY (user_id, achievement_id)
         )
     """)
-    conn.commit()
     
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN username TEXT DEFAULT NULL")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    # Добавляем начальные данные
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                       ('Обычная утка', '🦆', 0, 0))
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                       ('Золотая утка', '🌟', 5000, 2))
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                       ('Киберутка', '🤖', 15000, 5))
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                       ('Утка-призрак', '👻', 30000, 10))
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                       ('Дьявольская утка', '😈', 50000, 15))
     
-    cursor.execute("SELECT COUNT(*) FROM skins")
-    if cursor.fetchone()[0] == 0:
-        cursor.executemany("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES (?, ?, ?, ?)", [
-            ('Обычная утка', '🦆', 0, 0),
-            ('Золотая утка', '🌟', 5000, 2),
-            ('Киберутка', '🤖', 15000, 5),
-            ('Утка-призрак', '👻', 30000, 10),
-            ('Дьявольская утка', '😈', 50000, 15),
-        ])
+    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Обычный кейс", "📦", 1000))
+    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Серебряный кейс", "🥈", 5000))
+    await conn.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", ("Алмазный кейс", "💎", 15000))
     
-    cursor.execute("SELECT COUNT(*) FROM cases")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Обычный кейс", "📦", 1000))
-        case_id = cursor.lastrowid
-        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
-            (case_id, "clicks", 100, "100 кликов", 30),
-            (case_id, "clicks", 500, "500 кликов", 20),
-            (case_id, "clicks", 1000, "1000 кликов", 15),
-            (case_id, "clicks", 5000, "5000 кликов", 5),
-            (case_id, "gems", 1, "1 алмаз 💎", 15),
-            (case_id, "gems", 5, "5 алмазов 💎", 8),
-            (case_id, "booster", 1, "x2 клика (30 мин)", 5),
-            (case_id, "skin", 2, "Золотая утка 🌟", 2),
-        ])
-        
-        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Серебряный кейс", "🥈", 5000))
-        case_id = cursor.lastrowid
-        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
-            (case_id, "clicks", 1000, "1000 кликов", 25),
-            (case_id, "clicks", 2500, "2500 кликов", 20),
-            (case_id, "clicks", 5000, "5000 кликов", 15),
-            (case_id, "gems", 2, "2 алмаза 💎", 15),
-            (case_id, "gems", 5, "5 алмазов 💎", 10),
-            (case_id, "booster", 1, "x2 клика (30 мин)", 8),
-            (case_id, "skin", 3, "Киберутка 🤖", 5),
-            (case_id, "skin", 4, "Утка-призрак 👻", 2),
-        ])
-        
-        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Алмазный кейс", "💎", 15000))
-        case_id = cursor.lastrowid
-        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
-            (case_id, "clicks", 5000, "5000 кликов", 20),
-            (case_id, "clicks", 10000, "10000 кликов", 15),
-            (case_id, "clicks", 25000, "25000 кликов", 10),
-            (case_id, "gems", 5, "5 алмазов 💎", 15),
-            (case_id, "gems", 10, "10 алмазов 💎", 10),
-            (case_id, "gems", 25, "25 алмазов 💎", 5),
-            (case_id, "booster", 1, "x2 клика (1 час)", 10),
-            (case_id, "skin", 4, "Утка-призрак 👻", 4),
-            (case_id, "skin", 5, "Дьявольская утка 😈", 3),
-        ])
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+                       ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000))
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+                       ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000))
     
-    cursor.execute("SELECT COUNT(*) FROM boosters")
-    if cursor.fetchone()[0] == 0:
-        cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
-            ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
-            ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
-        ])
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Везунчик", "Открыть 5 кейсов", "cases", 5, 3, 3000))
+    await conn.execute("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                       ("Азартный", "Открыть 20 кейсов", "cases", 20, 10, 10000))
     
-    cursor.execute("SELECT COUNT(*) FROM achievements")
-    if cursor.fetchone()[0] == 0:
-        cursor.executemany("INSERT INTO achievements (name, description, condition_type, condition_value, reward_gems, reward_clicks) VALUES (?, ?, ?, ?, ?, ?)", [
-            ("Новичок", "Накликать 100 кликов", "clicks", 100, 1, 500),
-            ("Серебряный палец", "Накликать 1000 кликов", "clicks", 1000, 2, 2000),
-            ("Золотой палец", "Накликать 10000 кликов", "clicks", 10000, 5, 10000),
-            ("Коллекционер", "Купить 1 скин", "skins", 1, 1, 500),
-            ("Магнат", "Купить 3 скина", "skins", 3, 3, 2000),
-            ("Везунчик", "Открыть 5 кейсов", "cases", 5, 3, 3000),
-            ("Азартный", "Открыть 20 кейсов", "cases", 20, 10, 10000),
-        ])
-    conn.commit()
-    conn.close()
+    await conn.close()
 
-init_db()
-
-def get_user_stats(user_id: int, username: str = None):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems, username FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    conn.close()
+async def get_user_stats(user_id: int, username: str = None):
+    conn = await asyncpg.connect(DATABASE_URL)
+    result = await conn.fetchrow("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems, username FROM users WHERE user_id = $1", user_id)
     if result:
-        if username and result[9] != username:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
-            conn.commit()
-            conn.close()
+        if username and result['username'] != username:
+            await conn.execute("UPDATE users SET username = $1 WHERE user_id = $2", username, user_id)
+        await conn.close()
         return {
-            "clicks": result[0], "level": result[1], "energy": result[2],
-            "tap_power": result[3], "passive_income": result[4], "skin": result[5],
-            "total_clicks": result[6], "daily_streak": result[7], "gems": result[8],
-            "username": result[9] or str(user_id)
+            "clicks": result['clicks'], "level": result['level'], "energy": result['energy'],
+            "tap_power": result['tap_power'], "passive_income": result['passive_income'],
+            "skin": result['current_skin'], "total_clicks": result['total_clicks'],
+            "daily_streak": result['daily_streak'], "gems": result['gems'],
+            "username": result['username'] or str(user_id)
         }
     else:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0))
-        conn.commit()
-        conn.close()
+        await conn.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                           user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0)
+        await conn.close()
         return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0, "username": username or str(user_id)}
 
-def update_clicks(user_id: int, increment: int):
-    for attempt in range(3):
-        try:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute("SELECT clicks, total_clicks, level, energy FROM users WHERE user_id = ?", (user_id,))
-            result = cursor.fetchone()
-            if result:
-                new_clicks = result[0] + increment
-                new_total = result[1] + increment
-                new_energy = result[3] - 1 if result[3] > 0 else 0
-                new_level = 1 + new_total // 100
-                cursor.execute("UPDATE users SET clicks = ?, total_clicks = ?, level = ?, energy = ? WHERE user_id = ?",
-                               (new_clicks, new_total, new_level, new_energy, user_id))
-                conn.commit()
-            conn.close()
-            return True
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e) and attempt < 2:
-                time.sleep(0.1)
-                continue
-            raise e
-    return False
+async def update_clicks(user_id: int, increment: int):
+    conn = await asyncpg.connect(DATABASE_URL)
+    result = await conn.fetchrow("SELECT clicks, total_clicks, level, energy FROM users WHERE user_id = $1", user_id)
+    if result:
+        new_clicks = result['clicks'] + increment
+        new_total = result['total_clicks'] + increment
+        new_energy = result['energy'] - 1 if result['energy'] > 0 else 0
+        new_level = 1 + new_total // 100
+        await conn.execute("UPDATE users SET clicks = $1, total_clicks = $2, level = $3, energy = $4 WHERE user_id = $5",
+                           new_clicks, new_total, new_level, new_energy, user_id)
+    await conn.close()
 
-def add_gems(user_id: int, amount: int):
-    for attempt in range(3):
-        try:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
-            gems = cursor.fetchone()[0]
-            cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (gems + amount, user_id))
-            conn.commit()
-            conn.close()
-            return True
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e) and attempt < 2:
-                time.sleep(0.1)
-                continue
-            raise e
-    return False
+async def add_gems(user_id: int, amount: int):
+    conn = await asyncpg.connect(DATABASE_URL)
+    result = await conn.fetchrow("SELECT gems FROM users WHERE user_id = $1", user_id)
+    if result:
+        await conn.execute("UPDATE users SET gems = $1 WHERE user_id = $2", result['gems'] + amount, user_id)
+    await conn.close()
 
-def get_active_boosters(user_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
+async def get_active_boosters(user_id: int):
+    conn = await asyncpg.connect(DATABASE_URL)
     now = datetime.now().isoformat()
-    cursor.execute("""
+    result = await conn.fetch("""
         SELECT b.id, b.name, b.emoji, b.description, b.effect_type, b.effect_value, b.duration_minutes,
-               (julianday(ub.expires_at) - julianday(?)) * 24 * 60 as minutes_left
+               EXTRACT(EPOCH FROM (ub.expires_at - $1::timestamp)) / 60 as minutes_left
         FROM user_boosters ub
         JOIN boosters b ON ub.booster_id = b.id
-        WHERE ub.user_id = ? AND ub.expires_at > ?
-    """, (now, user_id, now))
-    result = cursor.fetchall()
-    conn.close()
-    return [{"id": r[0], "name": r[1], "emoji": r[2], "description": r[3], "effect_type": r[4],
-             "effect_value": r[5], "minutes_left": int(r[7])} for r in result]
+        WHERE ub.user_id = $2 AND ub.expires_at > $1
+    """, now, user_id)
+    await conn.close()
+    return [{"id": r['id'], "name": r['name'], "emoji": r['emoji'], "description": r['description'],
+             "effect_type": r['effect_type'], "effect_value": r['effect_value'], "minutes_left": int(r['minutes_left'] or 0)} for r in result]
 
-def get_booster_multiplier(user_id: int):
-    boosters = get_active_boosters(user_id)
+async def get_booster_multiplier(user_id: int):
+    boosters = await get_active_boosters(user_id)
     multiplier = 1.0
     for b in boosters:
         if b["effect_type"] == "tap_multiplier":
             multiplier *= b["effect_value"]
     return multiplier
 
-def check_achievements(user_id: int, condition_type: str, current_value: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, condition_value, reward_gems, reward_clicks FROM achievements WHERE condition_type = ?", (condition_type,))
-    achievements = cursor.fetchall()
+async def check_achievements(user_id: int, condition_type: str, current_value: int):
+    conn = await asyncpg.connect(DATABASE_URL)
+    achievements = await conn.fetch("SELECT id, condition_value, reward_gems, reward_clicks FROM achievements WHERE condition_type = $1", condition_type)
     for ach in achievements:
-        ach_id, ach_value, reward_gems, reward_clicks = ach
-        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
-        result = cursor.fetchone()
-        if not result or result[0] == 0:
-            if current_value >= ach_value:
-                cursor.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES (?, ?, ?, ?, ?)",
-                               (user_id, ach_id, ach_value, 1, datetime.now().isoformat()))
-                if reward_gems > 0:
-                    add_gems(user_id, reward_gems)
-                if reward_clicks > 0:
-                    cursor.execute("UPDATE users SET clicks = clicks + ? WHERE user_id = ?", (reward_clicks, user_id))
-    conn.commit()
-    conn.close()
+        completed = await conn.fetchval("SELECT completed FROM user_achievements WHERE user_id = $1 AND achievement_id = $2", user_id, ach['id'])
+        if not completed and current_value >= ach['condition_value']:
+            await conn.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES ($1, $2, $3, $4, $5)",
+                               user_id, ach['id'], ach['condition_value'], 1, datetime.now().isoformat())
+            if ach['reward_gems'] > 0:
+                await add_gems(user_id, ach['reward_gems'])
+            if ach['reward_clicks'] > 0:
+                await conn.execute("UPDATE users SET clicks = clicks + $1 WHERE user_id = $2", ach['reward_clicks'], user_id)
+    await conn.close()
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
 
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    multiplier = get_booster_multiplier(data.user_id)
+    multiplier = await get_booster_multiplier(data.user_id)
     final_clicks = int(data.clicks * multiplier)
-    update_clicks(data.user_id, final_clicks)
-    stats = get_user_stats(data.user_id)
-    check_achievements(data.user_id, "clicks", stats["total_clicks"])
+    await update_clicks(data.user_id, final_clicks)
+    stats = await get_user_stats(data.user_id)
+    await check_achievements(data.user_id, "clicks", stats["total_clicks"])
     return {
         "clicks": stats["clicks"], "level": stats["level"], "energy": stats["energy"],
         "tap_power": stats["tap_power"], "passive_income": stats["passive_income"], "gems": stats["gems"]
@@ -336,240 +249,198 @@ async def handle_click(data: ClickData):
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
-    stats = get_user_stats(user_id)
+    stats = await get_user_stats(user_id)
     price = stats["tap_power"] * 100
     if stats["clicks"] >= price:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await asyncpg.connect(DATABASE_URL)
         new_clicks = stats["clicks"] - price
         new_tap_power = stats["tap_power"] + 1
-        cursor.execute("UPDATE users SET clicks = ?, tap_power = ? WHERE user_id = ?", (new_clicks, new_tap_power, user_id))
-        conn.commit()
-        conn.close()
+        await conn.execute("UPDATE users SET clicks = $1, tap_power = $2 WHERE user_id = $3", new_clicks, new_tap_power, user_id)
+        await conn.close()
         return {"success": True, "new_tap_power": new_tap_power}
     return {"success": False, "need": price}
 
 @app.post("/api/upgrade_passive")
 async def upgrade_passive(user_id: int):
-    stats = get_user_stats(user_id)
+    stats = await get_user_stats(user_id)
     price = 500 + stats["passive_income"] * 100
     if stats["clicks"] >= price:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await asyncpg.connect(DATABASE_URL)
         new_clicks = stats["clicks"] - price
         new_passive = stats["passive_income"] + 5
-        cursor.execute("UPDATE users SET clicks = ?, passive_income = ? WHERE user_id = ?", (new_clicks, new_passive, user_id))
-        conn.commit()
-        conn.close()
+        await conn.execute("UPDATE users SET clicks = $1, passive_income = $2 WHERE user_id = $3", new_clicks, new_passive, user_id)
+        await conn.close()
         return {"success": True, "new_passive": new_passive}
     return {"success": False, "need": price}
 
 @app.post("/api/collect_passive")
 async def collect_passive(user_id: int):
-    stats = get_user_stats(user_id)
+    stats = await get_user_stats(user_id)
     if stats["passive_income"] > 0:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await asyncpg.connect(DATABASE_URL)
         new_clicks = stats["clicks"] + stats["passive_income"]
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-        conn.commit()
-        conn.close()
+        await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
+        await conn.close()
         return {"success": True, "earned": stats["passive_income"]}
     return {"success": False, "message": "Нет пассивного дохода"}
 
 @app.post("/api/claim_daily")
 async def claim_daily(user_id: int):
-    stats = get_user_stats(user_id)
+    stats = await get_user_stats(user_id)
     today = datetime.now().date()
     last_date = datetime.fromisoformat(stats.get("last_daily", "")).date() if stats.get("last_daily") else None
     if last_date == today:
         return {"success": False, "message": "Уже забирал сегодня"}
     streak = stats["daily_streak"] + 1 if last_date == today - timedelta(days=1) else 1
     bonus = min(100 + streak * 50, 600)
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET clicks = clicks + ?, daily_streak = ?, last_daily = ? WHERE user_id = ?",
-                   (bonus, streak, today.isoformat(), user_id))
-    conn.commit()
-    conn.close()
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("UPDATE users SET clicks = clicks + $1, daily_streak = $2, last_daily = $3 WHERE user_id = $4",
+                       bonus, streak, today.isoformat(), user_id)
+    await conn.close()
     return {"success": True, "bonus": bonus, "streak": streak}
 
 @app.post("/api/buy_skin")
 async def buy_skin(user_id: int, skin_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, emoji, price_clicks FROM skins WHERE id = ?", (skin_id,))
-    skin = cursor.fetchone()
+    conn = await asyncpg.connect(DATABASE_URL)
+    skin = await conn.fetchrow("SELECT name, emoji, price_clicks FROM skins WHERE id = $1", skin_id)
     if not skin:
-        conn.close()
+        await conn.close()
         return {"success": False, "message": "Скин не найден"}
-    skin_name, skin_emoji, price = skin
-    stats = get_user_stats(user_id)
-    if stats["clicks"] >= price:
-        new_clicks = stats["clicks"] - price
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-        cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, skin_id))
-        cursor.execute("SELECT COUNT(*) FROM user_skins WHERE user_id = ?", (user_id,))
-        skins_count = cursor.fetchone()[0]
-        conn.commit()
-        conn.close()
-        check_achievements(user_id, "skins", skins_count)
-        return {"success": True, "skin_name": skin_name, "skin_emoji": skin_emoji}
-    conn.close()
-    return {"success": False, "need": price}
+    stats = await get_user_stats(user_id)
+    if stats["clicks"] >= skin['price_clicks']:
+        new_clicks = stats["clicks"] - skin['price_clicks']
+        await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
+        await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, skin_id)
+        skins_count = await conn.fetchval("SELECT COUNT(*) FROM user_skins WHERE user_id = $1", user_id)
+        await conn.close()
+        await check_achievements(user_id, "skins", skins_count)
+        return {"success": True, "skin_name": skin['name'], "skin_emoji": skin['emoji']}
+    await conn.close()
+    return {"success": False, "need": skin['price_clicks']}
 
 @app.post("/api/equip_skin")
 async def equip_skin(user_id: int, skin_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM user_skins WHERE user_id = ? AND skin_id = ?", (user_id, skin_id))
-    if not cursor.fetchone():
-        conn.close()
+    conn = await asyncpg.connect(DATABASE_URL)
+    owned = await conn.fetchval("SELECT 1 FROM user_skins WHERE user_id = $1 AND skin_id = $2", user_id, skin_id)
+    if not owned:
+        await conn.close()
         return {"success": False, "message": "Скин не куплен"}
-    cursor.execute("SELECT emoji FROM skins WHERE id = ?", (skin_id,))
-    emoji = cursor.fetchone()[0]
-    cursor.execute("UPDATE users SET current_skin = ? WHERE user_id = ?", (emoji, user_id))
-    conn.commit()
-    conn.close()
+    emoji = await conn.fetchval("SELECT emoji FROM skins WHERE id = $1", skin_id)
+    await conn.execute("UPDATE users SET current_skin = $1 WHERE user_id = $2", emoji, user_id)
+    await conn.close()
     return {"success": True, "skin": emoji}
 
 @app.get("/api/get_skins")
 async def get_skins(user_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT skin_id FROM user_skins WHERE user_id = ?", (user_id,))
-    owned = [row[0] for row in cursor.fetchall()]
-    cursor.execute("SELECT current_skin FROM users WHERE user_id = ?", (user_id,))
-    current = cursor.fetchone()[0]
-    cursor.execute("SELECT id, name, emoji, price_clicks, tap_bonus FROM skins")
-    skins = cursor.fetchall()
-    conn.close()
-    return {"skins": [{"id": s[0], "name": s[1], "emoji": s[2], "price": s[3], "bonus": s[4], "owned": s[0] in owned, "equipped": s[2] == current} for s in skins], "current_skin": current}
+    conn = await asyncpg.connect(DATABASE_URL)
+    owned = [row['skin_id'] for row in await conn.fetch("SELECT skin_id FROM user_skins WHERE user_id = $1", user_id)]
+    current = await conn.fetchval("SELECT current_skin FROM users WHERE user_id = $1", user_id)
+    skins = await conn.fetch("SELECT id, name, emoji, price_clicks, tap_bonus FROM skins")
+    await conn.close()
+    return {"skins": [{"id": s['id'], "name": s['name'], "emoji": s['emoji'], "price": s['price_clicks'], "bonus": s['tap_bonus'], "owned": s['id'] in owned, "equipped": s['emoji'] == current} for s in skins], "current_skin": current}
 
 @app.post("/api/open_case")
 async def open_case(user_id: int, case_id: int = 1):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, emoji, price_clicks FROM cases WHERE id = ?", (case_id,))
-    case = cursor.fetchone()
+    conn = await asyncpg.connect(DATABASE_URL)
+    case = await conn.fetchrow("SELECT name, emoji, price_clicks FROM cases WHERE id = $1", case_id)
     if not case:
-        conn.close()
+        await conn.close()
         return {"success": False, "message": "Кейс не найден"}
-    case_name, case_emoji, price = case
-    stats = get_user_stats(user_id)
-    if stats["clicks"] >= price:
-        new_clicks = stats["clicks"] - price
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-        cursor.execute("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = ?", (case_id,))
-        rewards = cursor.fetchall()
-        total_chance = sum(r[3] for r in rewards)
+    stats = await get_user_stats(user_id)
+    if stats["clicks"] >= case['price_clicks']:
+        new_clicks = stats["clicks"] - case['price_clicks']
+        await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
+        rewards = await conn.fetch("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = $1", case_id)
+        total_chance = sum(r['chance'] for r in rewards)
         rand = random.randint(1, total_chance)
         cumulative = 0
         selected = None
         for reward in rewards:
-            cumulative += reward[3]
+            cumulative += reward['chance']
             if rand <= cumulative:
                 selected = reward
                 break
-        reward_type, reward_value, reward_text, _ = selected
-        if reward_type == "clicks":
-            cursor.execute("UPDATE users SET clicks = clicks + ? WHERE user_id = ?", (reward_value, user_id))
-        elif reward_type == "gems":
-            cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (reward_value, user_id))
-        elif reward_type == "booster":
-            expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60)
-            cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
-                           (user_id, reward_value, expires_at.isoformat()))
-        elif reward_type == "skin":
-            cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
-        cursor.execute("SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id IN (6,7) AND completed = 1", (user_id,))
-        cases_opened = cursor.fetchone()[0]
-        conn.commit()
-        conn.close()
-        check_achievements(user_id, "cases", cases_opened + 1)
-        return {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
-    conn.close()
-    return {"success": False, "need": price}
+        if selected['reward_type'] == "clicks":
+            await conn.execute("UPDATE users SET clicks = clicks + $1 WHERE user_id = $2", selected['reward_value'], user_id)
+        elif selected['reward_type'] == "gems":
+            await conn.execute("UPDATE users SET gems = gems + $1 WHERE user_id = $2", selected['reward_value'], user_id)
+        elif selected['reward_type'] == "booster":
+            expires_at = datetime.now() + timedelta(minutes=30)
+            await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                               user_id, selected['reward_value'], expires_at.isoformat())
+        elif selected['reward_type'] == "skin":
+            await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected['reward_value'])
+        cases_opened = await conn.fetchval("SELECT COUNT(*) FROM user_achievements WHERE user_id = $1 AND achievement_id IN (6,7) AND completed = 1", user_id)
+        await conn.close()
+        await check_achievements(user_id, "cases", cases_opened + 1)
+        return {"success": True, "reward_text": selected['reward_text'], "case_emoji": case['emoji']}
+    await conn.close()
+    return {"success": False, "need": case['price_clicks']}
 
 @app.get("/api/get_cases")
 async def get_cases():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, emoji, price_clicks FROM cases")
-    cases = cursor.fetchall()
-    conn.close()
-    return {"cases": [{"id": c[0], "name": c[1], "emoji": c[2], "price": c[3]} for c in cases]}
+    conn = await asyncpg.connect(DATABASE_URL)
+    cases = await conn.fetch("SELECT id, name, emoji, price_clicks FROM cases")
+    await conn.close()
+    return {"cases": [{"id": c['id'], "name": c['name'], "emoji": c['emoji'], "price": c['price_clicks']} for c in cases]}
 
 @app.get("/api/get_boosters")
 async def get_boosters(user_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, emoji, description, price_clicks FROM boosters")
-    shop_boosters = cursor.fetchall()
-    active = get_active_boosters(user_id)
-    conn.close()
-    return {"shop_boosters": [{"id": b[0], "name": b[1], "emoji": b[2], "description": b[3], "price": b[4]} for b in shop_boosters],
+    conn = await asyncpg.connect(DATABASE_URL)
+    shop_boosters = await conn.fetch("SELECT id, name, emoji, description, price_clicks FROM boosters")
+    active = await get_active_boosters(user_id)
+    await conn.close()
+    return {"shop_boosters": [{"id": b['id'], "name": b['name'], "emoji": b['emoji'], "description": b['description'], "price": b['price_clicks']} for b in shop_boosters],
             "active_boosters": active}
 
 @app.post("/api/buy_booster")
 async def buy_booster(user_id: int, booster_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, emoji, price_clicks, duration_minutes, effect_type, effect_value FROM boosters WHERE id = ?", (booster_id,))
-    booster = cursor.fetchone()
+    conn = await asyncpg.connect(DATABASE_URL)
+    booster = await conn.fetchrow("SELECT name, emoji, price_clicks, duration_minutes, effect_type, effect_value FROM boosters WHERE id = $1", booster_id)
     if not booster:
-        conn.close()
+        await conn.close()
         return {"success": False, "message": "Бустер не найден"}
-    booster_name, booster_emoji, price, duration, effect_type, effect_value = booster
-    stats = get_user_stats(user_id)
-    if stats["clicks"] >= price:
-        new_clicks = stats["clicks"] - price
-        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
-        expires_at = datetime.now() + timedelta(minutes=duration)
-        cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
-                       (user_id, booster_id, expires_at.isoformat()))
-        if effect_type == "energy":
-            new_energy = min(stats["energy"] + int(effect_value), 1000)
-            cursor.execute("UPDATE users SET energy = ? WHERE user_id = ?", (new_energy, user_id))
-        conn.commit()
-        conn.close()
-        return {"success": True, "booster_name": booster_name, "booster_emoji": booster_emoji}
-    conn.close()
-    return {"success": False, "need": price}
+    stats = await get_user_stats(user_id)
+    if stats["clicks"] >= booster['price_clicks']:
+        new_clicks = stats["clicks"] - booster['price_clicks']
+        await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
+        expires_at = datetime.now() + timedelta(minutes=booster['duration_minutes'])
+        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                           user_id, booster_id, expires_at.isoformat())
+        if booster['effect_type'] == "energy":
+            new_energy = min(stats["energy"] + int(booster['effect_value']), 1000)
+            await conn.execute("UPDATE users SET energy = $1 WHERE user_id = $2", new_energy, user_id)
+        await conn.close()
+        return {"success": True, "booster_name": booster['name'], "booster_emoji": booster['emoji']}
+    await conn.close()
+    return {"success": False, "need": booster['price_clicks']}
 
 @app.get("/api/get_achievements")
 async def get_achievements(user_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
-    achievements = cursor.fetchall()
+    conn = await asyncpg.connect(DATABASE_URL)
+    achievements = await conn.fetch("SELECT id, name, description, condition_value, reward_gems, reward_clicks FROM achievements")
     result = []
     for ach in achievements:
-        ach_id, name, desc, condition, reward_gems, reward_clicks = ach
-        cursor.execute("SELECT completed FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
-        completed = cursor.fetchone()
+        completed = await conn.fetchval("SELECT completed FROM user_achievements WHERE user_id = $1 AND achievement_id = $2", user_id, ach['id'])
         result.append({
-            "id": ach_id, "name": name, "description": desc, "condition": condition,
-            "reward_gems": reward_gems, "reward_clicks": reward_clicks,
-            "completed": completed[0] if completed else 0
+            "id": ach['id'], "name": ach['name'], "description": ach['description'], "condition": ach['condition_value'],
+            "reward_gems": ach['reward_gems'], "reward_clicks": ach['reward_clicks'], "completed": completed or 0
         })
-    conn.close()
+    await conn.close()
     return {"achievements": result}
 
 @app.get("/api/get_leaderboard")
 async def get_leaderboard(limit: int = 10):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, username, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
-    result = cursor.fetchall()
-    conn.close()
-    return {"leaderboard": [{"user_id": r[0], "username": r[1] or str(r[0]), "clicks": r[2]} for r in result]}
+    conn = await asyncpg.connect(DATABASE_URL)
+    result = await conn.fetch("SELECT user_id, username, total_clicks FROM users ORDER BY total_clicks DESC LIMIT $1", limit)
+    await conn.close()
+    return {"leaderboard": [{"user_id": r['user_id'], "username": r['username'] or str(r['user_id']), "clicks": r['total_clicks']} for r in result]}
 
 @app.get("/api/get_stats")
 async def get_stats(user_id: int, username: str = None):
-    stats = get_user_stats(user_id, username)
-    boosters = get_active_boosters(user_id)
-    tap_multiplier = get_booster_multiplier(user_id)
+    stats = await get_user_stats(user_id, username)
+    boosters = await get_active_boosters(user_id)
+    tap_multiplier = await get_booster_multiplier(user_id)
     return {**stats, "boosters": boosters, "tap_multiplier": tap_multiplier}
 
 @app.get("/health")
@@ -578,7 +449,7 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1, username: str = None):
-    stats = get_user_stats(user_id, username)
+    stats = await get_user_stats(user_id, username)
     
     html = f'''<!DOCTYPE html>
 <html>
@@ -706,12 +577,12 @@ async def mini_app(user_id: int = 1, username: str = None):
         }}
         
         function updateUI() {{
-            document.getElementById('clicksValue').innerText = clicks;
-            document.getElementById('levelValue').innerText = level;
-            document.getElementById('tapPowerValue').innerText = '+' + tapPower;
-            document.getElementById('passiveValue').innerText = passiveIncome + '/час';
-            document.getElementById('gemsValue').innerText = gems;
-            document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
+            document.getElementById('clicksValue').textContent = clicks;
+            document.getElementById('levelValue').textContent = level;
+            document.getElementById('tapPowerValue').textContent = '+' + tapPower;
+            document.getElementById('passiveValue').textContent = passiveIncome + '/час';
+            document.getElementById('gemsValue').textContent = gems;
+            document.getElementById('energyValue').textContent = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
         }}
         
@@ -729,7 +600,7 @@ async def mini_app(user_id: int = 1, username: str = None):
                 gems = data.gems;
                 currentSkin = data.skin;
                 updateUI();
-                document.getElementById('duck').innerText = currentSkin;
+                document.getElementById('duck').textContent = currentSkin;
             }} catch(e) {{ console.error(e); }}
         }}
         
