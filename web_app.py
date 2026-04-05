@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
-import time
 
 app = FastAPI()
 
@@ -19,7 +18,6 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "zeta_clicker.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -806,28 +804,6 @@ async def mini_app(user_id: int = 1):
     </div>
 
     <script>
-    <script>
-    // Проверка окружения
-    window.onload = function() {
-        const isTelegramWebView = !!(window.Telegram && window.Telegram.WebApp);
-        const userAgent = navigator.userAgent;
-        
-        console.log('Is Telegram WebView:', isTelegramWebView);
-        console.log('UserAgent:', userAgent);
-        
-        if (!isTelegramWebView) {
-            document.body.innerHTML = '<div style="padding:20px;text-align:center;font-family:sans-serif;">' +
-                '<h2>⚠️ Открывай в Telegram</h2>' +
-                '<p>Это приложение работает только внутри Telegram.</p>' +
-                '<p>Нажми на три точки → "Открыть в браузере"</p>' +
-                '</div>';
-        } else {
-            const tg = window.Telegram.WebApp;
-            tg.ready();
-            tg.expand();
-        }
-    };
-</script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
