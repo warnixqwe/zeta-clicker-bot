@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import random
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -30,6 +31,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
+            username TEXT DEFAULT NULL,
             clicks INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
             energy INTEGER DEFAULT 1000,
@@ -119,6 +121,12 @@ def init_db():
     """)
     conn.commit()
     
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN username TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    
     cursor.execute("SELECT COUNT(*) FROM skins")
     if cursor.fetchone()[0] == 0:
         cursor.executemany("INSERT INTO skins (name, emoji, price_clicks, tap_bonus) VALUES (?, ?, ?, ?)", [
@@ -143,12 +151,41 @@ def init_db():
             (case_id, "booster", 1, "x2 клика (30 мин)", 5),
             (case_id, "skin", 2, "Золотая утка 🌟", 2),
         ])
+        
+        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Серебряный кейс", "🥈", 5000))
+        case_id = cursor.lastrowid
+        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
+            (case_id, "clicks", 1000, "1000 кликов", 25),
+            (case_id, "clicks", 2500, "2500 кликов", 20),
+            (case_id, "clicks", 5000, "5000 кликов", 15),
+            (case_id, "gems", 2, "2 алмаза 💎", 15),
+            (case_id, "gems", 5, "5 алмазов 💎", 10),
+            (case_id, "booster", 1, "x2 клика (30 мин)", 8),
+            (case_id, "skin", 3, "Киберутка 🤖", 5),
+            (case_id, "skin", 4, "Утка-призрак 👻", 2),
+        ])
+        
+        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Алмазный кейс", "💎", 15000))
+        case_id = cursor.lastrowid
+        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
+            (case_id, "clicks", 5000, "5000 кликов", 20),
+            (case_id, "clicks", 10000, "10000 кликов", 15),
+            (case_id, "clicks", 25000, "25000 кликов", 10),
+            (case_id, "gems", 5, "5 алмазов 💎", 15),
+            (case_id, "gems", 10, "10 алмазов 💎", 10),
+            (case_id, "gems", 25, "25 алмазов 💎", 5),
+            (case_id, "booster", 1, "x2 клика (1 час)", 10),
+            (case_id, "booster", 3, "Автокликер (10 мин)", 8),
+            (case_id, "skin", 4, "Утка-призрак 👻", 4),
+            (case_id, "skin", 5, "Дьявольская утка 😈", 3),
+        ])
     
     cursor.execute("SELECT COUNT(*) FROM boosters")
     if cursor.fetchone()[0] == 0:
         cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
             ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
             ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
+            ("Автокликер", "🤖", "Автоматически кликает 5 раз в секунду (10 минут)", "auto_click", 5, 10, 8000),
         ])
     
     cursor.execute("SELECT COUNT(*) FROM achievements")
@@ -167,26 +204,51 @@ def init_db():
 
 init_db()
 
-def get_user_stats(user_id: int):
+# Словарь для хранения активных задач автокликера
+auto_click_tasks = {}
+
+async def auto_click_worker(user_id: int, tap_power: int, duration_minutes: int):
+    """Фоновая задача для автокликера"""
+    end_time = datetime.now() + timedelta(minutes=duration_minutes)
+    clicks_per_second = 5
+    interval = 1.0 / clicks_per_second
+    
+    while datetime.now() < end_time:
+        update_clicks(user_id, tap_power)
+        stats = get_user_stats(user_id)
+        await asyncio.sleep(interval)
+    
+    # Удаляем задачу из словаря
+    if user_id in auto_click_tasks:
+        del auto_click_tasks[user_id]
+
+def get_user_stats(user_id: int, username: str = None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems, username FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
+        if username and result[9] != username:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+            conn.commit()
+            conn.close()
         return {
             "clicks": result[0], "level": result[1], "energy": result[2],
             "tap_power": result[3], "passive_income": result[4], "skin": result[5],
-            "total_clicks": result[6], "daily_streak": result[7], "gems": result[8]
+            "total_clicks": result[6], "daily_streak": result[7], "gems": result[8],
+            "username": result[9] or str(user_id)
         }
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, 0, 1, 1000, 1, 0, "🦆", 0, 0, 0))
+        cursor.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0))
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0}
+        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0, "username": username or str(user_id)}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -411,7 +473,7 @@ async def open_case(user_id: int, case_id: int = 1):
         elif reward_type == "gems":
             cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (reward_value, user_id))
         elif reward_type == "booster":
-            expires_at = datetime.now() + timedelta(minutes=30)
+            expires_at = datetime.now() + timedelta(minutes=30 if reward_value == 1 else 60 if reward_value == 2 else 10)
             cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
                            (user_id, reward_value, expires_at.isoformat()))
         elif reward_type == "skin":
@@ -465,6 +527,13 @@ async def buy_booster(user_id: int, booster_id: int):
         if effect_type == "energy":
             new_energy = min(stats["energy"] + int(effect_value), 1000)
             cursor.execute("UPDATE users SET energy = ? WHERE user_id = ?", (new_energy, user_id))
+        elif effect_type == "auto_click":
+            # Запускаем автокликер в фоне
+            if user_id in auto_click_tasks:
+                # Останавливаем старый, если есть
+                pass
+            task = asyncio.create_task(auto_click_worker(user_id, stats["tap_power"], duration))
+            auto_click_tasks[user_id] = task
         conn.commit()
         conn.close()
         return {"success": True, "booster_name": booster_name, "booster_emoji": booster_emoji}
@@ -494,14 +563,14 @@ async def get_achievements(user_id: int):
 async def get_leaderboard(limit: int = 10):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT user_id, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
+    cursor.execute("SELECT user_id, username, total_clicks FROM users ORDER BY total_clicks DESC LIMIT ?", (limit,))
     result = cursor.fetchall()
     conn.close()
-    return {"leaderboard": [{"user_id": r[0], "clicks": r[1]} for r in result]}
+    return {"leaderboard": [{"user_id": r[0], "username": r[1] or str(r[0]), "clicks": r[2]} for r in result]}
 
 @app.get("/api/get_stats")
-async def get_stats(user_id: int):
-    stats = get_user_stats(user_id)
+async def get_stats(user_id: int, username: str = None):
+    stats = get_user_stats(user_id, username)
     boosters = get_active_boosters(user_id)
     tap_multiplier = get_booster_multiplier(user_id)
     return {**stats, "boosters": boosters, "tap_multiplier": tap_multiplier}
@@ -511,8 +580,8 @@ async def health():
     return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
-async def mini_app(user_id: int = 1):
-    stats = get_user_stats(user_id)
+async def mini_app(user_id: int = 1, username: str = None):
+    stats = get_user_stats(user_id, username)
     
     html = f'''<!DOCTYPE html>
 <html>
@@ -617,6 +686,8 @@ async def mini_app(user_id: int = 1):
         tg.expand();
         
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
+        let username = tg.initDataUnsafe?.user?.username || null;
+        
         let clicks = {stats["clicks"]};
         let level = {stats["level"]};
         let tapPower = {stats["tap_power"]};
@@ -649,7 +720,9 @@ async def mini_app(user_id: int = 1):
         
         async function loadStats() {{
             try {{
-                const res = await fetch('/api/get_stats?user_id=' + userId);
+                let url = '/api/get_stats?user_id=' + userId;
+                if (username) url += '&username=' + encodeURIComponent(username);
+                const res = await fetch(url);
                 const data = await res.json();
                 clicks = data.clicks;
                 level = data.level;
@@ -674,7 +747,8 @@ async def mini_app(user_id: int = 1):
                     const div = document.createElement('div');
                     div.className = 'leaderboard-item';
                     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '📊';
-                    div.innerHTML = '<span>' + medal + ' ' + (i+1) + '. Пользователь ' + player.user_id + '</span><span>' + player.clicks + ' кликов</span>';
+                    const displayName = player.username && player.username !== String(player.user_id) ? '@' + player.username : '👤 Пользователь ' + player.user_id;
+                    div.innerHTML = '<span>' + medal + ' ' + (i+1) + '. ' + displayName + '</span><span>' + player.clicks + ' кликов</span>';
                     leaderboardList.appendChild(div);
                 }}
             }} catch(e) {{ console.error(e); }}
