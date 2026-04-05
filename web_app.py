@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -37,7 +38,8 @@ def init_db():
             current_skin TEXT DEFAULT '🦆',
             total_clicks INTEGER DEFAULT 0,
             last_daily TIMESTAMP DEFAULT NULL,
-            daily_streak INTEGER DEFAULT 0
+            daily_streak INTEGER DEFAULT 0,
+            gems INTEGER DEFAULT 0
         )
     """)
     cursor.execute("""
@@ -56,6 +58,44 @@ def init_db():
             PRIMARY KEY (user_id, skin_id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            emoji TEXT,
+            price_clicks INTEGER
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS case_rewards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id INTEGER,
+            reward_type TEXT,
+            reward_value INTEGER,
+            reward_text TEXT,
+            chance INTEGER
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS boosters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            emoji TEXT,
+            description TEXT,
+            effect_type TEXT,
+            effect_value REAL,
+            duration_minutes INTEGER,
+            price_clicks INTEGER
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_boosters (
+            user_id INTEGER,
+            booster_id INTEGER,
+            expires_at TIMESTAMP,
+            PRIMARY KEY (user_id, booster_id)
+        )
+    """)
     conn.commit()
     
     cursor.execute("SELECT COUNT(*) FROM skins")
@@ -67,6 +107,28 @@ def init_db():
             ('Утка-призрак', '👻', 30000, 10),
             ('Дьявольская утка', '😈', 50000, 15),
         ])
+    
+    cursor.execute("SELECT COUNT(*) FROM cases")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO cases (name, emoji, price_clicks) VALUES (?, ?, ?)", ("Обычный кейс", "📦", 1000))
+        case_id = cursor.lastrowid
+        cursor.executemany("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (?, ?, ?, ?, ?)", [
+            (case_id, "clicks", 100, "100 кликов", 30),
+            (case_id, "clicks", 500, "500 кликов", 20),
+            (case_id, "clicks", 1000, "1000 кликов", 15),
+            (case_id, "clicks", 5000, "5000 кликов", 5),
+            (case_id, "gems", 1, "1 алмаз 💎", 15),
+            (case_id, "gems", 5, "5 алмазов 💎", 8),
+            (case_id, "booster", 1, "x2 клика (30 мин)", 5),
+            (case_id, "skin", 2, "Золотая утка 🌟", 2),
+        ])
+    
+    cursor.execute("SELECT COUNT(*) FROM boosters")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+            ("x2 Клики", "⚡", "Удваивает силу клика на 30 минут", "tap_multiplier", 2, 30, 5000),
+            ("Энергетик", "🔋", "Восстанавливает 500 энергии", "energy", 500, 0, 2000),
+        ])
     conn.commit()
     conn.close()
 
@@ -75,23 +137,23 @@ init_db()
 def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
         return {
             "clicks": result[0], "level": result[1], "energy": result[2],
             "tap_power": result[3], "passive_income": result[4], "skin": result[5],
-            "total_clicks": result[6], "daily_streak": result[7]
+            "total_clicks": result[6], "daily_streak": result[7], "gems": result[8]
         }
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, 0, 1, 1000, 1, 0, "🦆", 0, 0))
+        cursor.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (user_id, 0, 1, 1000, 1, 0, "🦆", 0, 0, 0))
         conn.commit()
         conn.close()
-        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0}
+        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0}
 
 def update_clicks(user_id: int, increment: int):
     conn = sqlite3.connect(DB_PATH)
@@ -108,13 +170,48 @@ def update_clicks(user_id: int, increment: int):
         conn.commit()
     conn.close()
 
+def add_gems(user_id: int, amount: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT gems FROM users WHERE user_id = ?", (user_id,))
+    gems = cursor.fetchone()[0]
+    cursor.execute("UPDATE users SET gems = ? WHERE user_id = ?", (gems + amount, user_id))
+    conn.commit()
+    conn.close()
+
+def get_active_boosters(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute("""
+        SELECT b.id, b.name, b.emoji, b.description, b.effect_type, b.effect_value, b.duration_minutes,
+               (julianday(ub.expires_at) - julianday(?)) * 24 * 60 as minutes_left
+        FROM user_boosters ub
+        JOIN boosters b ON ub.booster_id = b.id
+        WHERE ub.user_id = ? AND ub.expires_at > ?
+    """, (now, user_id, now))
+    result = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "emoji": r[2], "description": r[3], "effect_type": r[4],
+             "effect_value": r[5], "minutes_left": int(r[7])} for r in result]
+
+def get_booster_multiplier(user_id: int):
+    boosters = get_active_boosters(user_id)
+    multiplier = 1.0
+    for b in boosters:
+        if b["effect_type"] == "tap_multiplier":
+            multiplier *= b["effect_value"]
+    return multiplier
+
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    update_clicks(data.user_id, data.clicks)
+    multiplier = get_booster_multiplier(data.user_id)
+    final_clicks = int(data.clicks * multiplier)
+    update_clicks(data.user_id, final_clicks)
     stats = get_user_stats(data.user_id)
     return {
         "clicks": stats["clicks"], "level": stats["level"], "energy": stats["energy"],
-        "tap_power": stats["tap_power"], "passive_income": stats["passive_income"]
+        "tap_power": stats["tap_power"], "passive_income": stats["passive_income"], "gems": stats["gems"]
     }
 
 @app.post("/api/upgrade_tap")
@@ -226,9 +323,100 @@ async def get_skins(user_id: int):
     conn.close()
     return {"skins": [{"id": s[0], "name": s[1], "emoji": s[2], "price": s[3], "bonus": s[4], "owned": s[0] in owned, "equipped": s[2] == current} for s in skins], "current_skin": current}
 
+@app.post("/api/open_case")
+async def open_case(user_id: int, case_id: int = 1):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, emoji, price_clicks FROM cases WHERE id = ?", (case_id,))
+    case = cursor.fetchone()
+    if not case:
+        conn.close()
+        return {"success": False, "message": "Кейс не найден"}
+    case_name, case_emoji, price = case
+    stats = get_user_stats(user_id)
+    if stats["clicks"] >= price:
+        new_clicks = stats["clicks"] - price
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        cursor.execute("SELECT reward_type, reward_value, reward_text, chance FROM case_rewards WHERE case_id = ?", (case_id,))
+        rewards = cursor.fetchall()
+        total_chance = sum(r[3] for r in rewards)
+        rand = random.randint(1, total_chance)
+        cumulative = 0
+        selected = None
+        for reward in rewards:
+            cumulative += reward[3]
+            if rand <= cumulative:
+                selected = reward
+                break
+        reward_type, reward_value, reward_text, _ = selected
+        if reward_type == "clicks":
+            cursor.execute("UPDATE users SET clicks = clicks + ? WHERE user_id = ?", (reward_value, user_id))
+        elif reward_type == "gems":
+            cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (reward_value, user_id))
+        elif reward_type == "booster":
+            expires_at = datetime.now() + timedelta(minutes=30)
+            cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
+                           (user_id, reward_value, expires_at.isoformat()))
+        elif reward_type == "skin":
+            cursor.execute("INSERT OR IGNORE INTO user_skins (user_id, skin_id) VALUES (?, ?)", (user_id, reward_value))
+        conn.commit()
+        conn.close()
+        return {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
+    conn.close()
+    return {"success": False, "need": price}
+
+@app.get("/api/get_cases")
+async def get_cases():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, emoji, price_clicks FROM cases")
+    cases = cursor.fetchall()
+    conn.close()
+    return {"cases": [{"id": c[0], "name": c[1], "emoji": c[2], "price": c[3]} for c in cases]}
+
+@app.get("/api/get_boosters")
+async def get_boosters(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, emoji, description, price_clicks FROM boosters")
+    shop_boosters = cursor.fetchall()
+    active = get_active_boosters(user_id)
+    conn.close()
+    return {"shop_boosters": [{"id": b[0], "name": b[1], "emoji": b[2], "description": b[3], "price": b[4]} for b in shop_boosters],
+            "active_boosters": active}
+
+@app.post("/api/buy_booster")
+async def buy_booster(user_id: int, booster_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, emoji, price_clicks, duration_minutes, effect_type, effect_value FROM boosters WHERE id = ?", (booster_id,))
+    booster = cursor.fetchone()
+    if not booster:
+        conn.close()
+        return {"success": False, "message": "Бустер не найден"}
+    booster_name, booster_emoji, price, duration, effect_type, effect_value = booster
+    stats = get_user_stats(user_id)
+    if stats["clicks"] >= price:
+        new_clicks = stats["clicks"] - price
+        cursor.execute("UPDATE users SET clicks = ? WHERE user_id = ?", (new_clicks, user_id))
+        expires_at = datetime.now() + timedelta(minutes=duration)
+        cursor.execute("INSERT OR REPLACE INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)",
+                       (user_id, booster_id, expires_at.isoformat()))
+        if effect_type == "energy":
+            new_energy = min(stats["energy"] + int(effect_value), 1000)
+            cursor.execute("UPDATE users SET energy = ? WHERE user_id = ?", (new_energy, user_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "booster_name": booster_name, "booster_emoji": booster_emoji}
+    conn.close()
+    return {"success": False, "need": price}
+
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
-    return get_user_stats(user_id)
+    stats = get_user_stats(user_id)
+    boosters = get_active_boosters(user_id)
+    tap_multiplier = get_booster_multiplier(user_id)
+    return {**stats, "boosters": boosters, "tap_multiplier": tap_multiplier}
 
 @app.get("/health")
 async def health():
@@ -265,13 +453,14 @@ async def mini_app(user_id: int = 1):
         .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 6px; transition: width 0.2s; }}
         .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; animation: floatUp 0.6s ease-out forwards; z-index: 1000; }}
         @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
-        .skin-list {{ margin: 20px 0; }}
-        .skin-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
-        .skin-info {{ display: flex; align-items: center; gap: 12px; }}
-        .skin-emoji {{ font-size: 40px; }}
-        .skin-name {{ font-size: 16px; font-weight: bold; }}
-        .skin-price {{ font-size: 12px; color: #ffd700; }}
-        .skin-buy-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
+        .skin-list, .booster-list, .case-list {{ margin: 20px 0; }}
+        .skin-item, .booster-item, .case-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info, .booster-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji, .booster-emoji, .case-emoji {{ font-size: 40px; }}
+        .skin-name, .booster-name {{ font-size: 16px; font-weight: bold; }}
+        .skin-price, .booster-price, .case-price {{ font-size: 12px; color: #ffd700; }}
+        .skin-buy-btn, .booster-buy-btn, .case-open-btn {{ background: #667eea; border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
+        .case-open-btn {{ background: linear-gradient(135deg, #ffd700, #ff8c00); color: #333; font-weight: bold; }}
         .button-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }}
     </style>
 </head>
@@ -283,6 +472,7 @@ async def mini_app(user_id: int = 1):
                 <div class="stat-row"><span class="stat-label">💰 Клики</span><span class="stat-value" id="clicksValue">{stats["clicks"]}</span></div>
                 <div class="stat-row"><span class="stat-label">💪 Сила клика</span><span class="stat-value" id="tapPowerValue">+{stats["tap_power"]}</span></div>
                 <div class="stat-row"><span class="stat-label">⏱️ Пассивный доход</span><span class="stat-value" id="passiveValue">{stats["passive_income"]}/час</span></div>
+                <div class="stat-row"><span class="stat-label">💎 Алмазы</span><span class="stat-value" id="gemsValue">{stats["gems"]}</span></div>
                 <div class="stat-row"><span class="stat-label">⚡ Энергия</span><span class="stat-value" id="energyValue">{stats["energy"]}/1000</span></div>
             </div>
             <div class="energy-bar"><div class="energy-fill" id="energyFill" style="width: {stats["energy"]/10}%"></div></div>
@@ -293,12 +483,27 @@ async def mini_app(user_id: int = 1):
                 <button class="btn" id="collectPassiveBtn">💵 Собрать пассивку</button>
                 <button class="btn" id="dailyBtn">🎁 Ежедневный</button>
                 <button class="btn" id="openShopBtn">👕 Магазин</button>
+                <button class="btn" id="openCasesBtn">📦 Кейсы</button>
+                <button class="btn" id="openBoostersBtn">⚡ Бустеры</button>
             </div>
         </div>
         
         <div id="shopScreen" class="screen">
             <h3 style="color: white; text-align: center;">👕 МАГАЗИН СКИНОВ</h3>
             <div id="skinsList" class="skin-list">Загрузка...</div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
+        
+        <div id="casesScreen" class="screen">
+            <h3 style="color: white; text-align: center;">📦 КЕЙСЫ</h3>
+            <div id="casesList" class="case-list">Загрузка...</div>
+            <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
+        </div>
+        
+        <div id="boostersScreen" class="screen">
+            <h3 style="color: white; text-align: center;">⚡ БУСТЕРЫ</h3>
+            <div id="activeBoostersList" class="booster-list">Активные бустеры: загрузка...</div>
+            <div id="shopBoostersList" class="booster-list">Доступные бустеры: загрузка...</div>
             <button class="btn back-btn" onclick="showScreen('mainScreen')">◀️ Назад</button>
         </div>
     </div>
@@ -314,14 +519,17 @@ async def mini_app(user_id: int = 1):
         let tapPower = {stats["tap_power"]};
         let passiveIncome = {stats["passive_income"]};
         let energy = {stats["energy"]};
+        let gems = {stats["gems"]};
         let maxEnergy = 1000;
         let currentSkin = "{stats["skin"]}";
         
         function showScreen(screenName) {{
-            document.getElementById('mainScreen').classList.remove('active');
-            document.getElementById('shopScreen').classList.remove('active');
+            const screens = ['mainScreen', 'shopScreen', 'casesScreen', 'boostersScreen'];
+            screens.forEach(s => document.getElementById(s).classList.remove('active'));
             document.getElementById(screenName).classList.add('active');
             if (screenName === 'shopScreen') loadSkins();
+            if (screenName === 'casesScreen') loadCases();
+            if (screenName === 'boostersScreen') loadBoosters();
         }}
         
         function updateUI() {{
@@ -329,6 +537,7 @@ async def mini_app(user_id: int = 1):
             document.getElementById('levelValue').innerText = level;
             document.getElementById('tapPowerValue').innerText = '+' + tapPower;
             document.getElementById('passiveValue').innerText = passiveIncome + '/час';
+            document.getElementById('gemsValue').innerText = gems;
             document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
             document.getElementById('energyFill').style.width = (energy / 10) + '%';
         }}
@@ -342,6 +551,7 @@ async def mini_app(user_id: int = 1):
                 tapPower = data.tap_power;
                 passiveIncome = data.passive_income;
                 energy = data.energy;
+                gems = data.gems;
                 currentSkin = data.skin;
                 updateUI();
                 document.getElementById('duck').innerText = currentSkin;
@@ -383,6 +593,62 @@ async def mini_app(user_id: int = 1):
             }} catch(e) {{ console.error(e); }}
         }}
         
+        async function loadCases() {{
+            try {{
+                const res = await fetch('/api/get_cases');
+                const data = await res.json();
+                const casesList = document.getElementById('casesList');
+                casesList.innerHTML = '';
+                for (const caseItem of data.cases) {{
+                    const div = document.createElement('div');
+                    div.className = 'case-item';
+                    div.innerHTML = 
+                        '<div class="skin-info">' +
+                            '<span class="case-emoji">' + caseItem.emoji + '</span>' +
+                            '<div><div class="skin-name">' + caseItem.name + '</div><div class="case-price">Цена: ' + caseItem.price + ' кликов</div></div>' +
+                        '</div>' +
+                        '<button class="case-open-btn" onclick="openCase(' + caseItem.id + ')">🎲 ОТКРЫТЬ</button>';
+                    casesList.appendChild(div);
+                }}
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
+        async function loadBoosters() {{
+            try {{
+                const res = await fetch('/api/get_boosters?user_id=' + userId);
+                const data = await res.json();
+                
+                const activeDiv = document.getElementById('activeBoostersList');
+                if (data.active_boosters.length > 0) {{
+                    activeDiv.innerHTML = '<h4 style="color: #ffd700;">⚡ АКТИВНЫЕ БУСТЕРЫ:</h4>';
+                    for (const b of data.active_boosters) {{
+                        activeDiv.innerHTML += 
+                            '<div class="booster-item">' +
+                                '<div class="booster-info">' +
+                                    '<span class="booster-emoji">' + b.emoji + '</span>' +
+                                    '<div><div class="booster-name">' + b.name + '</div><div class="booster-price">' + b.description + ' | Осталось: ' + b.minutes_left + ' мин</div></div>' +
+                                '</div>' +
+                            '</div>';
+                    }}
+                }} else {{
+                    activeDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #aaa;">Нет активных бустеров</div>';
+                }}
+                
+                const shopDiv = document.getElementById('shopBoostersList');
+                shopDiv.innerHTML = '<h4 style="color: #ffd700;">💎 ДОСТУПНЫЕ БУСТЕРЫ:</h4>';
+                for (const b of data.shop_boosters) {{
+                    shopDiv.innerHTML += 
+                        '<div class="booster-item">' +
+                            '<div class="booster-info">' +
+                                '<span class="booster-emoji">' + b.emoji + '</span>' +
+                                '<div><div class="booster-name">' + b.name + '</div><div class="booster-price">' + b.description + ' | Цена: ' + b.price + ' кликов</div></div>' +
+                            '</div>' +
+                            '<button class="booster-buy-btn" onclick="buyBooster(' + b.id + ')">💎 КУПИТЬ</button>' +
+                        '</div>';
+                }}
+            }} catch(e) {{ console.error(e); }}
+        }}
+        
         async function buySkin(skinId) {{
             const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId, {{method: 'POST'}});
             const data = await res.json();
@@ -405,6 +671,29 @@ async def mini_app(user_id: int = 1):
             }}
         }}
         
+        async function openCase(caseId) {{
+            const res = await fetch('/api/open_case?user_id=' + userId + '&case_id=' + caseId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + data.need + ' кликов', buttons: [{{type: 'ok'}}]}});
+            }}
+        }}
+        
+        async function buyBooster(boosterId) {{
+            const res = await fetch('/api/buy_booster?user_id=' + userId + '&booster_id=' + boosterId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{{type: 'ok'}}]}});
+                await loadStats();
+                await loadBoosters();
+            }} else {{
+                tg.showPopup({{title: '❌ Не хватает кликов', message: 'Нужно: ' + data.need + ' кликов', buttons: [{{type: 'ok'}}]}});
+            }}
+        }}
+        
         async function sendClick() {{
             try {{
                 const res = await fetch('/api/click', {{
@@ -418,6 +707,7 @@ async def mini_app(user_id: int = 1):
                 tapPower = data.tap_power;
                 passiveIncome = data.passive_income;
                 energy = data.energy;
+                gems = data.gems;
                 updateUI();
             }} catch(e) {{ console.error(e); }}
         }}
@@ -499,6 +789,8 @@ async def mini_app(user_id: int = 1):
         }};
         
         document.getElementById('openShopBtn').onclick = () => showScreen('shopScreen');
+        document.getElementById('openCasesBtn').onclick = () => showScreen('casesScreen');
+        document.getElementById('openBoostersBtn').onclick = () => showScreen('boostersScreen');
         
         setInterval(() => {{
             if (energy < maxEnergy) {{
