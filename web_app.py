@@ -185,8 +185,7 @@ async def get_user_stats(user_id: int, username: str = None):
             "username": result['username'] or str(user_id)
         }
     else:
-        await conn.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-                           user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0)
+        await conn.execute("INSERT INTO users (user_id, username, clicks, level, energy, tap_power, passive_income, current_skin, total_clicks, daily_streak, gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",user_id, username or str(user_id), 0, 1, 1000, 1, 0, "🦆", 0, 0, 0)
         await conn.close()
         return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "passive_income": 0, "skin": "🦆", "total_clicks": 0, "daily_streak": 0, "gems": 0, "username": username or str(user_id)}
 
@@ -198,8 +197,7 @@ async def update_clicks(user_id: int, increment: int):
         new_total = result['total_clicks'] + increment
         new_energy = result['energy'] - 1 if result['energy'] > 0 else 0
         new_level = 1 + new_total // 100
-        await conn.execute("UPDATE users SET clicks = $1, total_clicks = $2, level = $3, energy = $4 WHERE user_id = $5",
-                           new_clicks, new_total, new_level, new_energy, user_id)
+        await conn.execute("UPDATE users SET clicks = $1, total_clicks = $2, level = $3, energy = $4 WHERE user_id = $5",new_clicks, new_total, new_level, new_energy, user_id)
     await conn.close()
 
 async def add_gems(user_id: int, amount: int):
@@ -237,8 +235,7 @@ async def check_achievements(user_id: int, condition_type: str, current_value: i
     for ach in achievements:
         completed = await conn.fetchval("SELECT completed FROM user_achievements WHERE user_id = $1 AND achievement_id = $2", user_id, ach['id'])
         if not completed and current_value >= ach['condition_value']:
-            await conn.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES ($1, $2, $3, $4, $5)",
-                               user_id, ach['id'], ach['condition_value'], 1, datetime.now())
+            await conn.execute("INSERT INTO user_achievements (user_id, achievement_id, progress, completed, completed_at) VALUES ($1, $2, $3, $4, $5)",user_id, ach['id'], ach['condition_value'], 1, datetime.now())
             if ach['reward_gems'] > 0:
                 await add_gems(user_id, ach['reward_gems'])
             if ach['reward_clicks'] > 0:
@@ -308,8 +305,7 @@ async def claim_daily(user_id: int):
     streak = stats["daily_streak"] + 1 if last_date == today - timedelta(days=1) else 1
     bonus = min(100 + streak * 50, 600)
     conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute("UPDATE users SET clicks = clicks + $1, daily_streak = $2, last_daily = $3 WHERE user_id = $4",
-                       bonus, streak, today, user_id)
+    await conn.execute("UPDATE users SET clicks = clicks + $1, daily_streak = $2, last_daily = $3 WHERE user_id = $4",bonus, streak, today, user_id)
     await conn.close()
     return {"success": True, "bonus": bonus, "streak": streak}
 
@@ -383,8 +379,7 @@ async def open_case(user_id: int, case_id: int = 1):
             await conn.execute("UPDATE users SET gems = gems + $1 WHERE user_id = $2", selected['reward_value'], user_id)
         elif selected['reward_type'] == "booster":
             expires_at = datetime.now() + timedelta(minutes=30)
-            await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                               user_id, selected['reward_value'], expires_at.isoformat())
+            await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",user_id, selected['reward_value'], expires_at.isoformat())
         elif selected['reward_type'] == "skin":
             await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected['reward_value'])
         
@@ -424,8 +419,7 @@ async def buy_booster(user_id: int, booster_id: int):
         new_clicks = stats["clicks"] - booster['price_clicks']
         await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
         expires_at = datetime.now() + timedelta(minutes=booster['duration_minutes'])
-        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                           user_id, booster_id, expires_at
+        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",user_id, booster_id, expires_at
         if booster['effect_type'] == "energy":
             new_energy = min(stats["energy"] + int(booster['effect_value']), 1000)
             await conn.execute("UPDATE users SET energy = $1 WHERE user_id = $2", new_energy, user_id)
