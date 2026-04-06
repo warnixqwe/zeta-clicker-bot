@@ -488,94 +488,362 @@ async def mini_app(user_id: int = 1):
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
-        body {{ min-height: 100vh; background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding-bottom: 80px; }}
-        .container {{ max-width: 450px; margin: 0 auto; padding: 20px; }}
-        .card {{ background: rgba(20, 30, 45, 0.7); backdrop-filter: blur(12px); border-radius: 32px; padding: 20px; margin-bottom: 16px; border: 1px solid rgba(255, 215, 0, 0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }}
-        .title {{ font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #ffd700, #ff8c00); -webkit-background-clip: text; background-clip: text; color: transparent; text-align: center; margin-bottom: 20px; }}
-        .balance-row {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }}
-        .balance-label {{ color: rgba(255,255,255,0.6); font-size: 14px; }}
-        .balance-value {{ font-size: 32px; font-weight: bold; color: #ffd700; }}
-        .stats-grid {{ display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }}
-        .stat-item {{ display: flex; justify-content: space-between; align-items: center; }}
-        .stat-label {{ color: rgba(255,255,255,0.5); font-size: 14px; }}
-        .stat-value {{ color: white; font-size: 18px; font-weight: 600; }}
-        .highlight {{ color: #ffd700; }}
-        .energy-container {{ margin-top: 12px; }}
-        .energy-bar {{ width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; margin-top: 8px; }}
-        .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 4px; transition: width 0.2s; width: {stats["energy"]/stats["max_energy"]*100}%; }}
-        .tap-area {{ text-align: center; margin: 30px 0; }}
-        .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s ease; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
-        .duck:active {{ transform: scale(0.95); }}
-        .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 1000; animation: floatUp 0.6s ease-out forwards; }}
-        @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
-        .bottom-menu {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(20, 30, 45, 0.95);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255,215,0,0.2);
-    padding: 8px 10px;
-    z-index: 100;
-    overflow-x: auto;
-    white-space: nowrap;
-}
-
-.bottom-menu > div {
-    display: flex;
-    justify-content: space-around;
-    min-width: 100%;
-}
-
-.menu-item {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.6);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 6px 8px;
-    border-radius: 16px;
-    white-space: nowrap;
-}
-        .menu-item {{ display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.6); font-size: 12px; cursor: pointer; transition: all 0.2s; padding: 8px 12px; border-radius: 16px; }}
-        .menu-item.active {{ color: #ffd700; background: rgba(255,215,0,0.15); }}
-        .menu-icon {{ font-size: 24px; }}
-        .skins-list, .cases-list, .boosters-list, .leaderboard-list {{ margin: 20px 0; }}
-        .skin-item, .booster-item, .leaderboard-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
-        .skin-info, .booster-info {{ display: flex; align-items: center; gap: 12px; }}
-        .skin-emoji, .booster-emoji {{ font-size: 40px; }}
-        .skin-name, .booster-name {{ font-size: 16px; font-weight: bold; color: white; }}
-        .skin-price, .booster-price {{ font-size: 12px; color: #ffd700; }}
-        .skin-btn, .booster-btn {{ background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
-        .skin-btn.owned {{ background: #4caf50; }}
-        .case-item {{ background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,140,0,0.2)); border-radius: 20px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 20px; }}
-        .case-emoji {{ font-size: 80px; }}
-        .case-name {{ font-size: 20px; font-weight: bold; color: #ffd700; margin-top: 10px; }}
-        .case-price {{ font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 5px; }}
-        .leaderboard-item {{ display: flex; justify-content: space-between; padding: 12px; }}
-        .leaderboard-rank {{ font-weight: bold; color: #ffd700; width: 40px; }}
-        .leaderboard-name {{ flex: 1; }}
-        .leaderboard-clicks {{ color: #ffd700; }}
-        .referral-link {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px; word-break: break-all; }}
-        .referral-link-text {{ color: #ffd700; font-size: 12px; font-family: monospace; }}
-        .referral-stats {{ display: flex; justify-content: space-between; margin-bottom: 20px; }}
-        .referral-stat {{ text-align: center; flex: 1; }}
-        .referral-stat-value {{ font-size: 24px; font-weight: bold; color: #ffd700; }}
-        .copy-btn {{ background: #4caf50; border: none; border-radius: 12px; padding: 12px; color: white; cursor: pointer; width: 100%; margin-top: 10px; }}
-        .channel-btn {{ background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.3); border-radius: 24px; padding: 12px; text-align: center; cursor: pointer; margin-top: 20px; }}
-        .channel-text {{ color: #ffd700; font-size: 14px; font-weight: 600; }}
-        .screen {{ display: none; }}
-        .screen.active {{ display: block; }}
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }}
+        
+        body {{
+            min-height: 100vh;
+            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding-bottom: 80px;
+        }}
+        
+        .container {{
+            max-width: 450px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        
+        .card {{
+            background: rgba(20, 30, 45, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 32px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }}
+        
+        .title {{
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-align: center;
+            margin-bottom: 20px;
+        }}
+        
+        .balance-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 20px;
+        }}
+        
+        .balance-label {{
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+        }}
+        
+        .balance-value {{
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffd700;
+        }}
+        
+        .stats-grid {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }}
+        
+        .stat-item {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        
+        .stat-label {{
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+        }}
+        
+        .stat-value {{
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }}
+        
+        .highlight {{
+            color: #ffd700;
+        }}
+        
+        .energy-container {{
+            margin-top: 12px;
+        }}
+        
+        .energy-bar {{
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }}
+        
+        .energy-fill {{
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc66);
+            border-radius: 4px;
+            transition: width 0.2s;
+            width: {stats["energy"]/stats["max_energy"]*100}%;
+        }}
+        
+        .tap-area {{
+            text-align: center;
+            margin: 30px 0;
+        }}
+        
+        .duck {{
+            font-size: 180px;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+        }}
+        
+        .duck:active {{
+            transform: scale(0.95);
+        }}
+        
+        .tap-value {{
+            position: fixed;
+            pointer-events: none;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            z-index: 1000;
+            animation: floatUp 0.6s ease-out forwards;
+        }}
+        
+        @keyframes floatUp {{
+            0% {{
+                opacity: 1;
+                transform: translateY(0) scale(0.8);
+            }}
+            100% {{
+                opacity: 0;
+                transform: translateY(-80px) scale(1.2);
+            }}
+        }}
+        
+        .bottom-menu {{
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(20, 30, 45, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255,215,0,0.2);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-around;
+            z-index: 100;
+            overflow-x: auto;
+        }}
+        
+        .bottom-menu > div {{
+            display: flex;
+            justify-content: space-around;
+            min-width: 100%;
+        }}
+        
+        .menu-item {{
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.6);
+            font-size: 11px;
+            cursor: pointer;
+            padding: 6px 8px;
+            border-radius: 16px;
+            white-space: nowrap;
+        }}
+        
+        .menu-item.active {{
+            color: #ffd700;
+            background: rgba(255,215,0,0.15);
+        }}
+        
+        .menu-icon {{
+            font-size: 24px;
+        }}
+        
+        .skins-list, .cases-list, .boosters-list, .leaderboard-list {{
+            margin: 20px 0;
+        }}
+        
+        .skin-item, .booster-item, .leaderboard-item {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        
+        .skin-info, .booster-info {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+        
+        .skin-emoji, .booster-emoji {{
+            font-size: 40px;
+        }}
+        
+        .skin-name, .booster-name {{
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+        }}
+        
+        .skin-price, .booster-price {{
+            font-size: 12px;
+            color: #ffd700;
+        }}
+        
+        .skin-btn, .booster-btn {{
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 12px;
+            padding: 8px 16px;
+            color: white;
+            cursor: pointer;
+        }}
+        
+        .skin-btn.owned {{
+            background: #4caf50;
+        }}
+        
+        .case-item {{
+            background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,140,0,0.2));
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }}
+        
+        .case-emoji {{
+            font-size: 80px;
+        }}
+        
+        .case-name {{
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffd700;
+            margin-top: 10px;
+        }}
+        
+        .case-price {{
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            margin-top: 5px;
+        }}
+        
+        .leaderboard-item {{
+            display: flex;
+            justify-content: space-between;
+            padding: 12px;
+        }}
+        
+        .leaderboard-rank {{
+            font-weight: bold;
+            color: #ffd700;
+            width: 40px;
+        }}
+        
+        .leaderboard-name {{
+            flex: 1;
+        }}
+        
+        .leaderboard-clicks {{
+            color: #ffd700;
+        }}
+        
+        .referral-link {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }}
+        
+        .referral-link-text {{
+            color: #ffd700;
+            font-size: 12px;
+            font-family: monospace;
+        }}
+        
+        .referral-stats {{
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }}
+        
+        .referral-stat {{
+            text-align: center;
+            flex: 1;
+        }}
+        
+        .referral-stat-value {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+        }}
+        
+        .copy-btn {{
+            background: #4caf50;
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            color: white;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }}
+        
+        .channel-btn {{
+            background: rgba(255,215,0,0.15);
+            border: 1px solid rgba(255,215,0,0.3);
+            border-radius: 24px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            margin-top: 20px;
+        }}
+        
+        .channel-text {{
+            color: #ffd700;
+            font-size: 14px;
+            font-weight: 600;
+        }}
+        
+        .screen {{
+            display: none;
+        }}
+        
+        .screen.active {{
+            display: block;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- ГЛАВНЫЙ ЭКРАН -->
         <div id="mainScreen" class="screen active">
             <div class="card">
                 <div class="title">Zeta Clicker</div>
@@ -615,6 +883,7 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
+        <!-- КЕЙСЫ -->
         <div id="casesScreen" class="screen">
             <div class="card">
                 <div class="title">📦 Кейсы</div>
@@ -622,6 +891,7 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
+        <!-- РЕФЕРАЛЫ -->
         <div id="referralScreen" class="screen">
             <div class="card">
                 <div class="title">👥 Рефералы</div>
@@ -640,6 +910,7 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
+        <!-- МАГАЗИН СКИНОВ -->
         <div id="shopScreen" class="screen">
             <div class="card">
                 <div class="title">👕 Магазин скинов</div>
@@ -647,6 +918,7 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
+        <!-- БУСТЕРЫ И УЛУЧШЕНИЯ -->
         <div id="boostersScreen" class="screen">
             <div class="card">
                 <div class="title">⚡ Бустеры</div>
@@ -668,6 +940,7 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
+        <!-- ТОП ИГРОКОВ -->
         <div id="leaderboardScreen" class="screen">
             <div class="card">
                 <div class="title">🏆 Топ игроков</div>
@@ -676,8 +949,9 @@ async def mini_app(user_id: int = 1):
         </div>
     </div>
     
-        <div class="bottom-menu">
-        <div style="display: flex; justify-content: space-around; width: 100%; overflow-x: auto; gap: 5px;">
+    <!-- НИЖНЕЕ МЕНЮ -->
+    <div class="bottom-menu">
+        <div style="display: flex; justify-content: space-around; width: 100%; gap: 5px;">
             <button class="menu-item" data-screen="mainScreen"><span class="menu-icon">🦆</span><span>Кликер</span></button>
             <button class="menu-item" data-screen="casesScreen"><span class="menu-icon">📦</span><span>Кейсы</span></button>
             <button class="menu-item" data-screen="referralScreen"><span class="menu-icon">👥</span><span>Рефка</span></button>

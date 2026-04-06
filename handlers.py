@@ -39,7 +39,10 @@ async def cmd_start(message: types.Message):
             conn.close()
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎮 Войти в игру", web_app=WebAppInfo(url=f"https://zeta-clicker-bot-2.up.railway.app/?user_id={user_id}"))]
+        [InlineKeyboardButton(
+            text="🎮 Войти в игру", 
+            web_app=WebAppInfo(url=f"https://https://zeta-clicker-bot-production-3a3b.up.railway.app/?user_id={user_id}")
+        )]
     ])
     
     await message.answer(
