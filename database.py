@@ -65,18 +65,21 @@ async def init_db():
     """)
     
     # Достижения
+    await conn.execute("DROP TABLE IF EXISTS achievements")
     await conn.execute("""
-        CREATE TABLE IF NOT EXISTS achievements (
-            id SERIAL PRIMARY KEY,
-            name TEXT,
-            description TEXT,
-            condition_type TEXT,
-            condition_value INTEGER,
-            reward_gems INTEGER,
-            reward_clicks INTEGER,
-            reward_skin_id INTEGER DEFAULT NULL
+    CREATE TABLE achievements (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        description TEXT,
+        condition_type TEXT,
+        condition_value INTEGER,
+        reward_gems INTEGER,
+        reward_clicks INTEGER,
+        reward_skin_id INTEGER DEFAULT NULL
         )
     """)
+    # Добавляем колонку reward_skin_id
+    await conn.execute("ALTER TABLE achievements ADD COLUMN reward_skin_id INTEGER DEFAULT NULL")
     
     # Прогресс достижений пользователей
     await conn.execute("""

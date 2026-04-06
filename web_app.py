@@ -1259,33 +1259,25 @@ async def mini_app(user_id: int = 1):
         }}
         
         async function loadLeaderboard() {
-            var res = await fetch('/api/get_leaderboard?limit=10');
-            var data = await res.json();
-            var leaderboardList = document.getElementById('leaderboardList');
-            leaderboardList.innerHTML = '';
-            for (var i = 0; i < data.leaderboard.length; i++) {
+    try {
+        var res = await fetch('/api/get_leaderboard?limit=10');
+        var data = await res.json();
+        var leaderboardList = document.getElementById('leaderboardList');
+        leaderboardList.innerHTML = '';
+        for (var i = 0; i < data.leaderboard.length; i++) {
             var player = data.leaderboard[i];
             var div = document.createElement('div');
             div.className = 'leaderboard-item';
             div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span>' +
-                        '<span class="leaderboard-name">' + player.username + '</span>' +
-                        '<span class="leaderboard-clicks">' + player.balance + '💰</span>';
-                leaderboardList.appendChild(div);
-            }
+                            '<span class="leaderboard-name">' + player.username + '</span>' +
+                            '<span class="leaderboard-clicks">' + player.balance + '💰</span>';
+            leaderboardList.appendChild(div);
+        }
+    } catch(e) {
+        console.error('Leaderboard error:', e);
+    }
 }
-        
-        setInterval(function() {{
-            if (energy < maxEnergy) {{
-                energy = Math.min(energy + 1, maxEnergy);
-                updateUI();
-            }}
-        }}, 2000);
-        
-        loadStats();
-    </script>
-</body>
-</html>'''
-    
+            
     return HTMLResponse(content=html)
 
 if __name__ == "__main__":
