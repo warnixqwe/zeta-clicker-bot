@@ -1,6 +1,5 @@
 import os
 import asyncpg
-from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -17,10 +16,10 @@ class ClickData(BaseModel):
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL)
     
-    # Удаляем старую таблицу, если есть
+    # Удаляем старую таблицу (чтобы очистить кэш)
     await conn.execute("DROP TABLE IF EXISTS users")
     
-    # Создаём новую с правильными колонками
+    # Создаём новую
     await conn.execute("""
         CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
