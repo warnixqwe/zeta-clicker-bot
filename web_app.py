@@ -452,13 +452,36 @@ async def get_boosters(user_id: int):
 @app.get("/api/get_leaderboard")
 async def get_leaderboard(limit: int = 10):
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    rows = await conn.fetch("SELECT user_id, total_clicks FROM users ORDER BY total_clicks DESC LIMIT $1", limit)
+    rows = await conn.fetch("SELECT user_id, balance, total_clicks FROM users ORDER BY balance DESC LIMIT $1", limit)
     await conn.close()
     
     leaderboard = []
     for row in rows:
-        username = await get_user_username(row["user_id"])
-        leaderboard.append({"user_id": row["user_id"], "username": username, "clicks": row["total_clicks"]})
+        user_id = row["user_id"]
+        username = str(user_id)
+        
+        # Пробуем получить username через Telegram API
+        try:
+            from aiogram import Bot
+            bot = Bot(token=os.getenv("BOT_TOKEN"))
+            user = await bot.get_chat(user_id)
+            await bot.session.close()
+            if user.username:
+                username = f"@{user.username}"
+            elif user.first_name:
+                username = user.first_name
+            else:
+                username = str(user_id)
+        except:
+            pass
+        
+        leaderboard.append({
+            "user_id": user_id,
+            "username": username,
+            "balance": row["balance"],
+            "clicks": row["total_clicks"]
+        })
+    
     return {"leaderboard": leaderboard}
 
 @app.get("/api/get_stats")
@@ -1235,26 +1258,28 @@ async def mini_app(user_id: int = 1):
             }};
         }}
         
-        async function loadLeaderboard() {{
+        async function loadLeaderboard() {
             var res = await fetch('/api/get_leaderboard?limit=10');
             var data = await res.json();
             var leaderboardList = document.getElementById('leaderboardList');
             leaderboardList.innerHTML = '';
-            for (var i = 0; i < data.leaderboard.length; i++) {{
-                var player = data.leaderboard[i];
-                var div = document.createElement('div');
-                div.className = 'leaderboard-item';
-                div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span><span class="leaderboard-name">' + player.username + '</span><span class="leaderboard-clicks">' + player.clicks + ' кликов</span>';
+            for (var i = 0; i < data.leaderboard.length; i++) {
+            var player = data.leaderboard[i];
+            var div = document.createElement('div');
+            div.className = 'leaderboard-item';
+            div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span>' +
+                        '<span class="leaderboard-name">' + player.username + '</span>' +
+                        '<span class="leaderboard-clicks">' + player.balance + '💰</span>';
                 leaderboardList.appendChild(div);
-            }}
-        }}
+            }
+}
         
         setInterval(function() {{
             if (energy < maxEnergy) {{
                 energy = Math.min(energy + 1, maxEnergy);
                 updateUI();
             }}
-        }}, 1000);
+        }}, 2000);
         
         loadStats();
     </script>
