@@ -417,19 +417,13 @@ async def add_referral(user_id: int, referrer_id: int) -> bool:
         return False
     
 async def check_referral_bonus(user_id: int, new_tap_power: int):
-    """Проверяем, не прокачал ли реферал силу тапа до 10 уровня"""
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    
-    # Находим, кто пригласил этого пользователя
     referrer = await conn.fetchval("""
         SELECT referrer_id FROM referrals WHERE referred_id = $1 AND bonus_claimed = 0
     """, user_id)
-    
     if referrer and new_tap_power >= 10:
-        # Начисляем бонус пригласившему (+5000 монет за активного друга)
         await conn.execute("UPDATE users SET balance = balance + 5000 WHERE user_id = $1", referrer)
         await conn.execute("UPDATE referrals SET bonus_claimed = 1 WHERE referred_id = $1", user_id)
-    
     await conn.close()
 
 async def claim_referral_reward(referrer_id: int) -> int:
