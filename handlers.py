@@ -185,7 +185,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
-    @router.callback_query(lambda c: c.data == "admin_add_gems")
+@router.callback_query(lambda c: c.data == "admin_add_gems")
 async def admin_add_gems_start(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет прав!", show_alert=True)
@@ -320,7 +320,7 @@ async def admin_users(callback: types.CallbackQuery):
     await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
-    @router.message(lambda message: message.text == ".з")
+@router.message(lambda message: message.text == ".з")
 async def dot_z_command(message: types.Message):
     user_id = message.from_user.id
     if user_id != ADMIN_ID:
