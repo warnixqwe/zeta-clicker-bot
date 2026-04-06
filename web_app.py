@@ -6,6 +6,11 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
+from database import (
+    init_db, get_user_stats, update_clicks, add_referral, check_referral_bonus,
+    get_referrals, claim_referral_reward, upgrade_tap_power, upgrade_hourly,
+    get_skins, buy_skin, equip_skin, open_case, get_cases, get_boosters, buy_booster, get_leaderboard
+)
 
 app = FastAPI()
 
@@ -539,6 +544,9 @@ async def share_image(user_id: int):
     img_byte_arr.seek(0)
     
     return Response(content=img_byte_arr.getvalue(), media_type="image/png")
+
+@app.post("/api/upgrade_tap") 
+async def upgrade_tap(user_id: int): stats = await get_user_stats(user_id) price = stats["profit_per_tap"] * 100 if stats["balance"] >= price: conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0) new_balance = stats["balance"] - price new_profit = stats["profit_per_tap"] + 1 await conn.execute("UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3", new_balance, new_profit, user_id) await conn.close() # Проверяем, не пора ли дать бонус пригласившему await check_referral_bonus(user_id, new_profit) return {"success": True, "new_tap_power": new_profit} return {"success": False, "need": price}
     
     html = f"""
 <!DOCTYPE html>

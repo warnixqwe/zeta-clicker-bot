@@ -530,23 +530,6 @@ async def upgrade_tap_power(user_id: int) -> Tuple[bool, int, int]:
     await conn.close()
     return (False, row['tap_power'], price)
 
-@app.post("/api/upgrade_tap")
-async def upgrade_tap(user_id: int):
-    stats = await get_user_stats(user_id)
-    price = stats["profit_per_tap"] * 100
-    if stats["balance"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-        new_balance = stats["balance"] - price
-        new_profit = stats["profit_per_tap"] + 1
-        await conn.execute("UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3", new_balance, new_profit, user_id)
-        await conn.close()
-        
-        # Проверяем, не пора ли дать бонус пригласившему
-        await check_referral_bonus(user_id, new_profit)
-        
-        return {"success": True, "new_tap_power": new_profit}
-    return {"success": False, "need": price}
-
 async def upgrade_passive_income(user_id: int) -> Tuple[bool, int, int]:
     conn = await get_connection()
     row = await conn.fetchrow("SELECT clicks, passive_income FROM users WHERE user_id = $1", user_id)
