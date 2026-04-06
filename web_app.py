@@ -18,15 +18,19 @@ class ClickData(BaseModel):
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     
-    await conn.execute("DROP TABLE IF EXISTS users")
-    await conn.execute("DROP TABLE IF EXISTS cases")
-    await conn.execute("DROP TABLE IF EXISTS case_rewards")
-    await conn.execute("DROP TABLE IF EXISTS boosters")
+    # Сначала удаляем таблицы, которые зависят от других (правильный порядок!)
     await conn.execute("DROP TABLE IF EXISTS user_boosters")
-    await conn.execute("DROP TABLE IF EXISTS referrals")
-    await conn.execute("DROP TABLE IF EXISTS skins")
     await conn.execute("DROP TABLE IF EXISTS user_skins")
+    await conn.execute("DROP TABLE IF EXISTS case_rewards")
+    await conn.execute("DROP TABLE IF EXISTS referrals")
+    await conn.execute("DROP TABLE IF EXISTS user_achievements")
+    await conn.execute("DROP TABLE IF EXISTS achievements")
+    await conn.execute("DROP TABLE IF EXISTS skins")
+    await conn.execute("DROP TABLE IF EXISTS boosters")
+    await conn.execute("DROP TABLE IF EXISTS cases")
+    await conn.execute("DROP TABLE IF EXISTS users")
     
+    # Теперь создаём таблицы заново
     await conn.execute("""
         CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
@@ -84,7 +88,7 @@ async def init_db():
     await conn.execute("""
         CREATE TABLE case_rewards (
             id SERIAL PRIMARY KEY,
-            case_id INTEGER REFERENCES cases(id),
+            case_id INTEGER REFERENCES cases(id) ON DELETE CASCADE,
             reward_type TEXT,
             reward_value INTEGER,
             reward_text TEXT,
@@ -114,6 +118,32 @@ async def init_db():
             PRIMARY KEY (user_id, booster_id)
         )
     """)
+    
+    await conn.execute("""
+        CREATE TABLE achievements (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            condition_type TEXT,
+            condition_value INTEGER,
+            reward_gems INTEGER,
+            reward_clicks INTEGER
+        )
+    """)
+    
+    await conn.execute("""
+        CREATE TABLE user_achievements (
+            user_id BIGINT,
+            achievement_id INTEGER,
+            progress INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            completed_at TIMESTAMP DEFAULT NULL,
+            PRIMARY KEY (user_id, achievement_id)
+        )
+    """)
+    
+    # Остальной код добавления скинов, кейсов и бустеров остаётся без изменений...
+    # (оставь всё как было после создания таблиц)
     
     await conn.executemany("""
         INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)
