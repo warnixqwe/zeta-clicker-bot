@@ -14,9 +14,9 @@ class ClickData(BaseModel):
     clicks: int
 
 async def init_db():
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     
-    # Удаляем старую таблицу (чтобы очистить кэш)
+    # Удаляем старую таблицу
     await conn.execute("DROP TABLE IF EXISTS users")
     
     # Создаём новую
@@ -36,7 +36,7 @@ async def init_db():
     await conn.close()
 
 async def get_user_stats(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
     if not row:
         await conn.execute("""
@@ -67,7 +67,7 @@ async def get_user_stats(user_id: int):
     }
 
 async def update_balance(user_id: int, increment: int):
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", increment, user_id)
     await conn.close()
 
