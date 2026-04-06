@@ -242,6 +242,41 @@ async def check_achievements(user_id: int, condition_type: str, current_value: i
                 await conn.execute("UPDATE users SET clicks = clicks + $1 WHERE user_id = $2", ach['reward_clicks'], user_id)
     await conn.close()
 
+    @app.get("/api/get_stats")
+async def get_stats(user_id: int):
+    stats = await get_user_stats(user_id)
+    return {
+        "clicks": stats[0],
+        "level": stats[1],
+        "energy": stats[2],
+        "tap_power": stats[3],
+        "passive_income": stats[4],
+        "skin": stats[6],
+        "total_clicks": stats[7],
+        "daily_streak": stats[8],
+        "gems": stats[9]
+    }
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    await update_clicks(data.user_id, data.clicks)
+    stats = await get_user_stats(data.user_id)
+    return {
+        "clicks": stats[0],
+        "level": stats[1],
+        "energy": stats[2],
+        "tap_power": stats[3],
+        "passive_income": stats[4],
+        "gems": stats[9]
+    }
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    success, new_power, price = await upgrade_tap_power(user_id)
+    if success:
+        return {"success": True, "new_tap_power": new_power}
+    return {"success": False, "need": price}
+
 @app.on_event("startup")
 async def startup():
     await init_db()
