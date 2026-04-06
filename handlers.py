@@ -20,7 +20,7 @@ class BroadcastState(StatesGroup):
 
 # ==================== КОМАНДЫ ПОЛЬЗОВАТЕЛЯ ====================
 
-@router.message(CommandStart())
+@router.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     
@@ -42,7 +42,7 @@ async def cmd_start(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="🎮 Войти в игру", 
-            web_app=WebAppInfo(url=f"https://https://zeta-clicker-bot-production-3a3b.up.railway.app/?user_id={user_id}")
+            web_app=WebAppInfo(url=f"https://zeta-clicker-bot-production-3a3b.up.railway.app/?user_id={user_id}")
         )]
     ])
     
