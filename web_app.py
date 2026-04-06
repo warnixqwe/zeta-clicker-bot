@@ -503,7 +503,8 @@ async def startup():
 async def mini_app(user_id: int = 1):
     stats = await get_user_stats(user_id)
     
-    html = f'''<!DOCTYPE html>
+    html = f"""
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -1287,8 +1288,14 @@ async def mini_app(user_id: int = 1):
         
         loadStats();
     </script>
-            
+</body>
+</html>
+"""            
     return HTMLResponse(content=html)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
