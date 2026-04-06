@@ -16,10 +16,8 @@ class ClickData(BaseModel):
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     
-    # Удаляем старую таблицу
     await conn.execute("DROP TABLE IF EXISTS users")
     
-    # Создаём новую
     await conn.execute("""
         CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
@@ -123,8 +121,8 @@ async def mini_app(user_id: int = 1):
         .energy-bar {{ width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; margin-top: 8px; }}
         .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 4px; transition: width 0.2s; width: {stats["boost_energy"]/stats["max_energy"]*100}%; }}
         .tap-area {{ text-align: center; margin: 30px 0; }}
-        .coin {{ width: 200px; height: 200px; background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 80px; font-weight: bold; color: #fff; text-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.1s ease; box-shadow: 0 20px 30px rgba(0,0,0,0.3); }}
-        .coin:active {{ transform: scale(0.95); }}
+        .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s ease; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
+        .duck:active {{ transform: scale(0.95); }}
         .button-group {{ display: flex; gap: 12px; margin: 20px 0; }}
         .btn {{ flex: 1; background: linear-gradient(135deg, #2a3a5a, #1a2a4a); border: none; border-radius: 24px; padding: 14px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
         .btn:active {{ transform: scale(0.96); }}
@@ -175,7 +173,7 @@ async def mini_app(user_id: int = 1):
         </div>
         
         <div class="tap-area">
-            <div class="coin" id="coin">💰</div>
+            <div class="duck" id="duck">🦆</div>
         </div>
         
         <div class="button-group">
@@ -252,7 +250,7 @@ async def mini_app(user_id: int = 1):
             setTimeout(() => el.remove(), 600);
         }}
         
-        document.getElementById('coin').onclick = async (e) => {{
+        document.getElementById('duck').onclick = async (e) => {{
             if (boostEnergy <= 0) {{
                 tg.showPopup({{ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{{type: 'ok'}}] }});
                 return;
@@ -266,9 +264,24 @@ async def mini_app(user_id: int = 1):
             await sendClick();
         }};
         
-        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({{ title: '⬆️ Улучшение', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
-        document.getElementById('boostBtn').onclick = () => tg.showPopup({{ title: '⚡ Boost', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
-        document.getElementById('secretBtn').onclick = () => tg.showPopup({{ title: '❓ Секретный бонус', message: 'Следи за новостями в канале!', buttons: [{{type: 'ok'}}] }});
+        document.getElementById('upgradeBtn').onclick = async () => {{
+            const res = await fetch('/api/upgrade_tap?user_id=' + userId, {{method: 'POST'}});
+            const data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Улучшено!', message: 'Сила клика: +' + data.new_tap_power, buttons: [{{type: 'ok'}}] }});
+                await loadStats();
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+            }}
+        }};
+        
+        document.getElementById('boostBtn').onclick = async () => {{
+            tg.showPopup({{ title: '⚡ Boost', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
+        }};
+        
+        document.getElementById('secretBtn').onclick = async () => {{
+            tg.showPopup({{ title: '❓ Секретный бонус', message: 'Следи за новостями в канале!', buttons: [{{type: 'ok'}}] }});
+        }};
         
         setInterval(() => {{
             if (boostEnergy < maxEnergy) {{
@@ -283,6 +296,19 @@ async def mini_app(user_id: int = 1):
 </html>'''
     
     return HTMLResponse(content=html)
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    stats = await get_user_stats(user_id)
+    price = stats["profit_per_tap"] * 100
+    if stats["balance"] >= price:
+        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+        new_balance = stats["balance"] - price
+        new_profit = stats["profit_per_tap"] + 1
+        await conn.execute("UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3", new_balance, new_profit, user_id)
+        await conn.close()
+        return {"success": True, "new_tap_power": new_profit}
+    return {"success": False, "need": price}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
