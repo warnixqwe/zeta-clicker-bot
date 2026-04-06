@@ -1326,25 +1326,22 @@ async def share_image(user_id: int):
         
         loadStats();
 
-        document.getElementById('shareBtn').onclick = async function() {
-    // Генерируем картинку
-    var imgUrl = '/api/share_image?user_id=' + userId;
-    
-    // Показываем попап с картинкой и кнопкой поделиться
-    tg.showPopup({
-        title: '📤 Поделиться прогрессом',
-        message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
-        buttons: [
-            {type: 'default', text: '📤 Поделиться'},
-            {type: 'cancel', text: 'Отмена'}
-        ]
-    }, function(buttonId) {
-        if (buttonId === '0') {
-            // Отправляем картинку в Telegram
-            tg.sendData(JSON.stringify({ action: 'share', user_id: userId }));
-        }
-    });
-};
+                document.getElementById('shareBtn').onclick = async function() {{
+            var imgUrl = '/api/share_image?user_id=' + userId;
+            
+            tg.showPopup({{
+                title: '📤 Поделиться прогрессом',
+                message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
+                buttons: [
+                    {{type: 'default', text: '📤 Поделиться'}},
+                    {{type: 'cancel', text: 'Отмена'}}
+                ]
+            }}, function(buttonId) {{
+                if (buttonId === '0') {{
+                    tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
+                }}
+            }});
+        }};
 
     </script>
 </body>
