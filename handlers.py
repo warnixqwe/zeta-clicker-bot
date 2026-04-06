@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import CommandStart
 
 from config import BOT_TOKEN, ADMIN_ID
 
@@ -19,7 +20,7 @@ class BroadcastState(StatesGroup):
 
 # ==================== КОМАНДЫ ПОЛЬЗОВАТЕЛЯ ====================
 
-@router.message(Command("start"))
+@router.message(CommandStart())
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     
@@ -68,14 +69,6 @@ async def cmd_game(message: types.Message):
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
-
-@router.message(lambda message: message.text == ".з")
-async def dot_z_command(message: types.Message):
-    user_id = message.from_user.id
-    if user_id != ADMIN_ID:
-        await message.answer("⛔ Нет прав!")
-        return
-    await cmd_admin(message)
 
 # ==================== АДМИН-ПАНЕЛЬ ====================
 
