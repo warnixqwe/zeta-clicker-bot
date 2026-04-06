@@ -419,7 +419,7 @@ async def buy_booster(user_id: int, booster_id: int):
         new_clicks = stats["clicks"] - booster['price_clicks']
         await conn.execute("UPDATE users SET clicks = $1 WHERE user_id = $2", new_clicks, user_id)
         expires_at = datetime.now() + timedelta(minutes=booster['duration_minutes'])
-        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",user_id, booster_id, expires_at
+        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES (?, ?, ?)", (user_id, booster_id, expires_at))
         if booster['effect_type'] == "energy":
             new_energy = min(stats["energy"] + int(booster['effect_value']), 1000)
             await conn.execute("UPDATE users SET energy = $1 WHERE user_id = $2", new_energy, user_id)
