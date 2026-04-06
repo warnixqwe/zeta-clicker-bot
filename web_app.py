@@ -16,8 +16,13 @@ class ClickData(BaseModel):
 
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL)
+    
+    # Удаляем старую таблицу, если есть
+    await conn.execute("DROP TABLE IF EXISTS users")
+    
+    # Создаём новую с правильными колонками
     await conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
             balance BIGINT DEFAULT 0,
             profit_per_tap INTEGER DEFAULT 1,
@@ -97,236 +102,41 @@ async def mini_app(user_id: int = 1):
     <title>OTMeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }}
-        
-        body {{
-            min-height: 100vh;
-            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            padding: 20px;
-        }}
-        
-        .container {{
-            max-width: 450px;
-            margin: 0 auto;
-        }}
-        
-        /* Карточка профиля */
-        .card {{
-            background: rgba(20, 30, 45, 0.7);
-            backdrop-filter: blur(12px);
-            border-radius: 32px;
-            padding: 20px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(255, 215, 0, 0.2);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }}
-        
-        .card-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 16px;
-        }}
-        
-        .title {{
-            font-size: 24px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #ffd700, #ff8c00);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }}
-        
-        .badge {{
-            background: rgba(0,0,0,0.5);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            color: #ffd700;
-        }}
-        
-        .balance-row {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 20px;
-        }}
-        
-        .balance-label {{
-            color: rgba(255,255,255,0.6);
-            font-size: 14px;
-        }}
-        
-        .balance-value {{
-            font-size: 32px;
-            font-weight: bold;
-            color: #ffd700;
-        }}
-        
-        .stats-grid {{
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-bottom: 20px;
-        }}
-        
-        .stat-item {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-        
-        .stat-label {{
-            color: rgba(255,255,255,0.5);
-            font-size: 14px;
-        }}
-        
-        .stat-value {{
-            color: white;
-            font-size: 18px;
-            font-weight: 600;
-        }}
-        
-        .highlight {{
-            color: #ffd700;
-        }}
-        
-        .level-container {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }}
-        
-        .level-text {{
-            color: #ffd700;
-            font-weight: bold;
-        }}
-        
-        .legendary {{
-            color: #ff8c00;
-            font-weight: bold;
-        }}
-        
-        /* Энергия */
-        .energy-container {{
-            margin-top: 12px;
-        }}
-        
-        .energy-bar {{
-            width: 100%;
-            height: 8px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 8px;
-        }}
-        
-        .energy-fill {{
-            height: 100%;
-            background: linear-gradient(90deg, #00ff88, #00cc66);
-            border-radius: 4px;
-            transition: width 0.2s;
-            width: {stats["boost_energy"]/stats["max_energy"]*100}%;
-        }}
-        
-        /* Tap зона */
-        .tap-area {{
-            text-align: center;
-            margin: 30px 0;
-        }}
-        
-        .coin {{
-            width: 200px;
-            height: 200px;
-            background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b);
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 80px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.1s ease;
-            box-shadow: 0 20px 30px rgba(0,0,0,0.3);
-        }}
-        
-        .coin:active {{
-            transform: scale(0.95);
-        }}
-        
-        /* Кнопки */
-        .button-group {{
-            display: flex;
-            gap: 12px;
-            margin: 20px 0;
-        }}
-        
-        .btn {{
-            flex: 1;
-            background: linear-gradient(135deg, #2a3a5a, #1a2a4a);
-            border: none;
-            border-radius: 24px;
-            padding: 14px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
-            text-align: center;
-        }}
-        
-        .btn:active {{
-            transform: scale(0.96);
-        }}
-        
-        .btn-boost {{
-            background: linear-gradient(135deg, #ff8c00, #ff4500);
-        }}
-        
-        .btn-secret {{
-            background: rgba(255,255,255,0.1);
-            width: 100%;
-            margin-top: 12px;
-        }}
-        
-        .tap-value {{
-            position: fixed;
-            pointer-events: none;
-            font-size: 28px;
-            font-weight: bold;
-            color: #ffd700;
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
-            z-index: 1000;
-            animation: floatUp 0.6s ease-out forwards;
-        }}
-        
-        @keyframes floatUp {{
-            0% {{
-                opacity: 1;
-                transform: translateY(0) scale(0.8);
-            }}
-            100% {{
-                opacity: 0;
-                transform: translateY(-80px) scale(1.2);
-            }}
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
+        body {{ min-height: 100vh; background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; }}
+        .container {{ max-width: 450px; margin: 0 auto; }}
+        .card {{ background: rgba(20, 30, 45, 0.7); backdrop-filter: blur(12px); border-radius: 32px; padding: 20px; margin-bottom: 16px; border: 1px solid rgba(255, 215, 0, 0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }}
+        .card-header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }}
+        .title {{ font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #ffd700, #ff8c00); -webkit-background-clip: text; background-clip: text; color: transparent; }}
+        .badge {{ background: rgba(0,0,0,0.5); padding: 4px 12px; border-radius: 20px; font-size: 12px; color: #ffd700; }}
+        .balance-row {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }}
+        .balance-label {{ color: rgba(255,255,255,0.6); font-size: 14px; }}
+        .balance-value {{ font-size: 32px; font-weight: bold; color: #ffd700; }}
+        .stats-grid {{ display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }}
+        .stat-item {{ display: flex; justify-content: space-between; align-items: center; }}
+        .stat-label {{ color: rgba(255,255,255,0.5); font-size: 14px; }}
+        .stat-value {{ color: white; font-size: 18px; font-weight: 600; }}
+        .highlight {{ color: #ffd700; }}
+        .level-container {{ display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); }}
+        .level-text {{ color: #ffd700; font-weight: bold; }}
+        .legendary {{ color: #ff8c00; font-weight: bold; }}
+        .energy-container {{ margin-top: 12px; }}
+        .energy-bar {{ width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; margin-top: 8px; }}
+        .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 4px; transition: width 0.2s; width: {stats["boost_energy"]/stats["max_energy"]*100}%; }}
+        .tap-area {{ text-align: center; margin: 30px 0; }}
+        .coin {{ width: 200px; height: 200px; background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 80px; font-weight: bold; color: #fff; text-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.1s ease; box-shadow: 0 20px 30px rgba(0,0,0,0.3); }}
+        .coin:active {{ transform: scale(0.95); }}
+        .button-group {{ display: flex; gap: 12px; margin: 20px 0; }}
+        .btn {{ flex: 1; background: linear-gradient(135deg, #2a3a5a, #1a2a4a); border: none; border-radius: 24px; padding: 14px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; }}
+        .btn:active {{ transform: scale(0.96); }}
+        .btn-boost {{ background: linear-gradient(135deg, #ff8c00, #ff4500); }}
+        .btn-secret {{ background: rgba(255,255,255,0.1); width: 100%; margin-top: 12px; }}
+        .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 1000; animation: floatUp 0.6s ease-out forwards; }}
+        @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Карточка -->
         <div class="card">
             <div class="card-header">
                 <span class="title">OTMeta</span>
@@ -334,7 +144,7 @@ async def mini_app(user_id: int = 1):
             </div>
             <div class="balance-row">
                 <span class="balance-label">💰 Баланс</span>
-                <span class="balance-value" id="balance">${stats["balance"]}</span>
+                <span class="balance-value" id="balance">{stats["balance"]}</span>
             </div>
             <div class="stats-grid">
                 <div class="stat-item">
@@ -365,12 +175,10 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- Кликабельная монета -->
         <div class="tap-area">
             <div class="coin" id="coin">💰</div>
         </div>
         
-        <!-- Кнопки -->
         <div class="button-group">
             <button class="btn" id="upgradeBtn">⬆️ Улучшить</button>
             <button class="btn btn-boost" id="boostBtn">⚡ Boost</button>
@@ -415,9 +223,7 @@ async def mini_app(user_id: int = 1):
                 boostEnergy = data.boost_energy;
                 maxEnergy = data.max_energy;
                 updateUI();
-            }} catch(e) {{
-                console.error('Load stats error:', e);
-            }}
+            }} catch(e) {{ console.error(e); }}
         }}
         
         async function sendClick() {{
@@ -434,9 +240,7 @@ async def mini_app(user_id: int = 1):
                 profitPerHour = data.profit_per_hour;
                 boostEnergy = data.boost_energy;
                 updateUI();
-            }} catch(e) {{
-                console.error('Click error:', e);
-            }}
+            }} catch(e) {{ console.error(e); }}
         }}
         
         function showFloatingNumber(x, y, value) {{
@@ -463,19 +267,10 @@ async def mini_app(user_id: int = 1):
             await sendClick();
         }};
         
-        document.getElementById('upgradeBtn').onclick = async () => {{
-            tg.showPopup({{ title: '⬆️ Улучшение', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
-        }};
+        document.getElementById('upgradeBtn').onclick = () => tg.showPopup({{ title: '⬆️ Улучшение', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
+        document.getElementById('boostBtn').onclick = () => tg.showPopup({{ title: '⚡ Boost', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
+        document.getElementById('secretBtn').onclick = () => tg.showPopup({{ title: '❓ Секретный бонус', message: 'Следи за новостями в канале!', buttons: [{{type: 'ok'}}] }});
         
-        document.getElementById('boostBtn').onclick = async () => {{
-            tg.showPopup({{ title: '⚡ Boost', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
-        }};
-        
-        document.getElementById('secretBtn').onclick = async () => {{
-            tg.showPopup({{ title: '❓ Секретный бонус', message: 'Следи за новостями в канале!', buttons: [{{type: 'ok'}}] }});
-        }};
-        
-        // Восстановление энергии (1 в секунду)
         setInterval(() => {{
             if (boostEnergy < maxEnergy) {{
                 boostEnergy = Math.min(boostEnergy + 1, maxEnergy);
