@@ -115,7 +115,6 @@ async def init_db():
         )
     """)
     
-    # Добавляем скины
     await conn.executemany("""
         INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)
     """, [
@@ -171,7 +170,6 @@ async def init_db():
         (case_id, 'skin', 5, 'Дьявольская утка 😈', 3),
     ])
     
-    # Бустеры
     await conn.executemany("""
         INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     """, [
@@ -321,8 +319,6 @@ async def open_case(user_id: int, case_id: int = 1):
                 "currency": "монет" if case["price_clicks"] > 0 else "алмазов"}
     
     rewards = await conn.fetch("SELECT reward_type, reward_value, reward_text FROM case_rewards WHERE case_id = $1", case_id)
-    
-    # Простой random выбор
     selected = random.choice(rewards)
     
     if selected["reward_type"] == "clicks":
@@ -522,7 +518,6 @@ async def mini_app(user_id: int = 1):
 </head>
 <body>
     <div class="container">
-        <!-- ГЛАВНЫЙ ЭКРАН -->
         <div id="mainScreen" class="screen active">
             <div class="card">
                 <div class="title">Zeta Clicker</div>
@@ -562,7 +557,6 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- КЕЙСЫ -->
         <div id="casesScreen" class="screen">
             <div class="card">
                 <div class="title">📦 Кейсы</div>
@@ -570,7 +564,6 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- РЕФЕРАЛЫ -->
         <div id="referralScreen" class="screen">
             <div class="card">
                 <div class="title">👥 Рефералы</div>
@@ -589,7 +582,6 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- МАГАЗИН СКИНОВ -->
         <div id="shopScreen" class="screen">
             <div class="card">
                 <div class="title">👕 Магазин скинов</div>
@@ -597,7 +589,6 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- БУСТЕРЫ И УЛУЧШЕНИЯ -->
         <div id="boostersScreen" class="screen">
             <div class="card">
                 <div class="title">⚡ Бустеры</div>
@@ -619,7 +610,6 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- ТОП ИГРОКОВ -->
         <div id="leaderboardScreen" class="screen">
             <div class="card">
                 <div class="title">🏆 Топ игроков</div>
@@ -628,7 +618,6 @@ async def mini_app(user_id: int = 1):
         </div>
     </div>
     
-    <!-- НИЖНЕЕ МЕНЮ -->
     <div class="bottom-menu">
         <button class="menu-item" data-screen="mainScreen"><span class="menu-icon">🦆</span><span>Кликер</span></button>
         <button class="menu-item" data-screen="casesScreen"><span class="menu-icon">📦</span><span>Кейсы</span></button>
@@ -639,37 +628,43 @@ async def mini_app(user_id: int = 1):
     </div>
     
     <script>
-        const tg = window.Telegram.WebApp;
+        var tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
         
-        const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let balance = {stats["balance"]};
-        let profitPerTap = {stats["profit_per_tap"]};
-        let profitPerHour = {stats["profit_per_hour"]};
-        let energy = {stats["energy"]};
-        let maxEnergy = {stats["max_energy"]};
-        let gems = {stats["gems"]};
-        let currentSkin = '{stats["current_skin"]}' || '🦆';
+        var userId = new URLSearchParams(window.location.search).get('user_id') || 1;
+        var balance = {stats["balance"]};
+        var profitPerTap = {stats["profit_per_tap"]};
+        var profitPerHour = {stats["profit_per_hour"]};
+        var energy = {stats["energy"]};
+        var maxEnergy = {stats["max_energy"]};
+        var gems = {stats["gems"]};
+        var currentSkin = "{stats["current_skin"]}" || '🦆';
         
-        // Переключение экранов
-        document.querySelectorAll('.menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const screenId = item.dataset.screen;
-                document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+        var menuItems = document.querySelectorAll('.menu-item');
+        for (var i = 0; i < menuItems.length; i++) {{
+            menuItems[i].addEventListener('click', function() {{
+                var screenId = this.dataset.screen;
+                var screens = document.querySelectorAll('.screen');
+                for (var j = 0; j < screens.length; j++) {{
+                    screens[j].classList.remove('active');
+                }}
                 document.getElementById(screenId).classList.add('active');
-                document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-                item.classList.add('active');
+                var allMenuItems = document.querySelectorAll('.menu-item');
+                for (var k = 0; k < allMenuItems.length; k++) {{
+                    allMenuItems[k].classList.remove('active');
+                }}
+                this.classList.add('active');
                 
                 if (screenId === 'casesScreen') loadCases();
                 if (screenId === 'shopScreen') loadSkins();
                 if (screenId === 'boostersScreen') loadBoosters();
                 if (screenId === 'referralScreen') loadReferralData();
                 if (screenId === 'leaderboardScreen') loadLeaderboard();
-            });
-        });
+            }});
+        }}
         
-        function updateUI() {
+        function updateUI() {{
             document.getElementById('balance').innerText = balance;
             document.getElementById('profitPerTap').innerText = '+' + profitPerTap;
             document.getElementById('profitPerHour').innerText = '+' + profitPerHour;
@@ -678,12 +673,12 @@ async def mini_app(user_id: int = 1):
             document.getElementById('energyFill').style.width = (energy / maxEnergy * 100) + '%';
             document.getElementById('upgradeTapValue').innerText = profitPerTap;
             document.getElementById('upgradeHourlyValue').innerText = profitPerHour;
-        }
+        }}
         
-        async function loadStats() {
-            try {
-                const res = await fetch('/api/get_stats?user_id=' + userId);
-                const data = await res.json();
+        async function loadStats() {{
+            try {{
+                var res = await fetch('/api/get_stats?user_id=' + userId);
+                var data = await res.json();
                 balance = data.balance;
                 profitPerTap = data.profit_per_tap;
                 profitPerHour = data.profit_per_hour;
@@ -693,233 +688,239 @@ async def mini_app(user_id: int = 1):
                 currentSkin = data.current_skin || '🦆';
                 document.getElementById('duck').innerText = currentSkin;
                 updateUI();
-            } catch(e) { console.error(e); }
-        }
+            }} catch(e) {{ console.error(e); }}
+        }}
         
-        async function sendClick() {
-            try {
-                const res = await fetch('/api/click', {
+        async function sendClick() {{
+            try {{
+                var res = await fetch('/api/click', {{
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, clicks: profitPerTap })
-                });
-                const data = await res.json();
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ user_id: userId, clicks: profitPerTap }})
+                }});
+                var data = await res.json();
                 balance = data.balance;
                 profitPerTap = data.profit_per_tap;
                 profitPerHour = data.profit_per_hour;
                 energy = data.energy;
                 gems = data.gems;
                 updateUI();
-            } catch(e) { console.error(e); }
-        }
+            }} catch(e) {{ console.error(e); }}
+        }}
         
-        function showFloatingNumber(x, y, value) {
-            const el = document.createElement('div');
+        function showFloatingNumber(x, y, value) {{
+            var el = document.createElement('div');
             el.className = 'tap-value';
             el.textContent = '+' + value;
             el.style.left = x + 'px';
             el.style.top = y + 'px';
             document.body.appendChild(el);
-            setTimeout(() => el.remove(), 600);
-        }
+            setTimeout(function() {{ el.remove(); }}, 600);
+        }}
         
-        document.getElementById('duck').onclick = async (e) => {
-            if (energy <= 0) {
-                tg.showPopup({ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{ type: 'ok' }] });
+        document.getElementById('duck').onclick = async function(e) {{
+            if (energy <= 0) {{
+                tg.showPopup({{ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{{type: 'ok'}}] }});
                 return;
-            }
-            const rect = e.target.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top;
+            }}
+            var rect = e.target.getBoundingClientRect();
+            var x = rect.left + rect.width / 2;
+            var y = rect.top;
             showFloatingNumber(x, y, profitPerTap);
             energy -= 1;
             updateUI();
             await sendClick();
-        };
+        }};
         
-        document.getElementById('upgradeTapBtn').onclick = async () => {
-            const res = await fetch('/api/upgrade_tap?user_id=' + userId, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '✅ Улучшено!', message: 'Сила тапа: +' + data.new_tap_power, buttons: [{ type: 'ok' }] });
+        document.getElementById('upgradeTapBtn').onclick = async function() {{
+            var res = await fetch('/api/upgrade_tap?user_id=' + userId, {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Улучшено!', message: 'Сила тапа: +' + data.new_tap_power, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
-            } else {
-                tg.showPopup({ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{ type: 'ok' }] });
-            }
-        };
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+            }}
+        }};
         
-        document.getElementById('upgradeHourlyBtn').onclick = async () => {
-            const res = await fetch('/api/upgrade_hourly?user_id=' + userId, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '✅ Улучшено!', message: 'Прибыль в час: +' + data.new_hourly, buttons: [{ type: 'ok' }] });
+        document.getElementById('upgradeHourlyBtn').onclick = async function() {{
+            var res = await fetch('/api/upgrade_hourly?user_id=' + userId, {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Улучшено!', message: 'Прибыль в час: +' + data.new_hourly, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
-            } else {
-                tg.showPopup({ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{ type: 'ok' }] });
-            }
-        };
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+            }}
+        }};
         
-        document.getElementById('channelBtn').onclick = () => tg.openTelegramLink('https://t.me/ZetaClicker');
+        document.getElementById('channelBtn').onclick = function() {{
+            tg.openTelegramLink('https://t.me/ZetaClicker');
+        }};
         
-        // Кейсы
-        async function loadCases() {
-            const casesList = document.getElementById('casesList');
+        async function loadCases() {{
+            var casesList = document.getElementById('casesList');
             casesList.innerHTML = '';
-            const cases = [
-                { id: 1, name: 'Обычный кейс', emoji: '📦', price: 1000, currency: 'монет' },
-                { id: 2, name: 'Золотой кейс', emoji: '🎁', price: 10000, currency: 'монет' },
-                { id: 3, name: 'Алмазный кейс', emoji: '💎', price: 50, currency: 'алмазов' }
+            var cases = [
+                {{ id: 1, name: 'Обычный кейс', emoji: '📦', price: 1000, currency: 'монет' }},
+                {{ id: 2, name: 'Золотой кейс', emoji: '🎁', price: 10000, currency: 'монет' }},
+                {{ id: 3, name: 'Алмазный кейс', emoji: '💎', price: 50, currency: 'алмазов' }}
             ];
-            for (const caseItem of cases) {
-                const div = document.createElement('div');
+            for (var i = 0; i < cases.length; i++) {{
+                var caseItem = cases[i];
+                var div = document.createElement('div');
                 div.className = 'case-item';
-                div.innerHTML = `<div class="case-emoji">${caseItem.emoji}</div><div class="case-name">${caseItem.name}</div><div class="case-price">Цена: ${caseItem.price} ${caseItem.currency}</div>`;
-                div.onclick = () => openCase(caseItem.id);
+                div.innerHTML = '<div class="case-emoji">' + caseItem.emoji + '</div><div class="case-name">' + caseItem.name + '</div><div class="case-price">Цена: ' + caseItem.price + ' ' + caseItem.currency + '</div>';
+                div.onclick = (function(id) {{
+                    return function() {{ openCase(id); }};
+                }})(caseItem.id);
                 casesList.appendChild(div);
-            }
-        }
+            }}
+        }}
         
-        async function openCase(caseId) {
-            const res = await fetch('/api/open_case?user_id=' + userId + '&case_id=' + caseId, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{ type: 'ok' }] });
+        async function openCase(caseId) {{
+            var res = await fetch('/api/open_case?user_id=' + userId + '&case_id=' + caseId, {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
-            } else {
-                tg.showPopup({ title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + data.currency, buttons: [{ type: 'ok' }] });
-            }
-        }
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + data.currency, buttons: [{{type: 'ok'}}] }});
+            }}
+        }}
         
-        // Магазин скинов
-        async function loadSkins() {
-            const res = await fetch('/api/get_skins?user_id=' + userId);
-            const data = await res.json();
-            const skinsList = document.getElementById('skinsList');
+        async function loadSkins() {{
+            var res = await fetch('/api/get_skins?user_id=' + userId);
+            var data = await res.json();
+            var skinsList = document.getElementById('skinsList');
             skinsList.innerHTML = '';
-            for (const skin of data.skins) {
-                const div = document.createElement('div');
+            for (var i = 0; i < data.skins.length; i++) {{
+                var skin = data.skins[i];
+                var div = document.createElement('div');
                 div.className = 'skin-item';
-                div.innerHTML = `<div class="skin-info"><span class="skin-emoji">${skin.emoji}</span><div><div class="skin-name">${skin.name}</div><div class="skin-price">+${skin.bonus} к силе | Цена: ${skin.price} монет</div></div></div>`;
-                const btn = document.createElement('button');
-                if (skin.owned) {
+                div.innerHTML = '<div class="skin-info"><span class="skin-emoji">' + skin.emoji + '</span><div><div class="skin-name">' + skin.name + '</div><div class="skin-price">+' + skin.bonus + ' к силе | Цена: ' + skin.price + ' монет</div></div></div>';
+                var btn = document.createElement('button');
+                if (skin.owned) {{
                     btn.className = 'skin-btn owned';
                     btn.innerHTML = '✅ Куплен';
                     div.appendChild(btn);
-                    const equipBtn = document.createElement('button');
+                    var equipBtn = document.createElement('button');
                     equipBtn.className = 'skin-btn';
                     equipBtn.style.marginLeft = '8px';
                     equipBtn.style.background = '#ff9800';
                     equipBtn.innerHTML = '⚡ Экипировать';
-                    equipBtn.onclick = () => equipSkin(skin.id);
+                    equipBtn.onclick = (function(id) {{
+                        return function() {{ equipSkin(id); }};
+                    }})(skin.id);
                     div.appendChild(equipBtn);
-                } else {
+                }} else {{
                     btn.className = 'skin-btn';
                     btn.innerHTML = '💎 Купить';
-                    btn.onclick = () => buySkin(skin.id);
+                    btn.onclick = (function(id) {{
+                        return function() {{ buySkin(id); }};
+                    }})(skin.id);
                     div.appendChild(btn);
-                }
+                }}
                 skinsList.appendChild(div);
-            }
-        }
+            }}
+        }}
         
-        async function buySkin(skinId) {
-            const res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '✅ Покупка успешна!', message: 'Вы купили ' + data.skin_name + ' ' + data.skin_emoji, buttons: [{ type: 'ok' }] });
+        async function buySkin(skinId) {{
+            var res = await fetch('/api/buy_skin?user_id=' + userId + '&skin_id=' + skinId, {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Покупка успешна!', message: 'Вы купили ' + data.skin_name + ' ' + data.skin_emoji, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
                 await loadSkins();
-            } else {
-                tg.showPopup({ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{ type: 'ok' }] });
-            }
-        }
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+            }}
+        }}
         
-        async function equipSkin(skinId) {
-            const res = await fetch('/api/equip_skin?user_id=' + userId + '&skin_id=' + skinId, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '✅ Скин экипирован!', message: 'Теперь ваша утка: ' + data.skin, buttons: [{ type: 'ok' }] });
+        async function equipSkin(skinId) {{
+            var res = await fetch('/api/equip_skin?user_id=' + userId + '&skin_id=' + skinId, {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Скин экипирован!', message: 'Теперь ваша утка: ' + data.skin, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
                 await loadSkins();
-            }
-        }
+            }}
+        }}
         
-        // Бустеры
-        async function loadBoosters() {
-            const res = await fetch('/api/get_boosters?user_id=' + userId);
-            const data = await res.json();
-            const activeDiv = document.getElementById('activeBoostersList');
-            if (data.boosters && data.boosters.length > 0) {
+        async function loadBoosters() {{
+            var res = await fetch('/api/get_boosters?user_id=' + userId);
+            var data = await res.json();
+            var activeDiv = document.getElementById('activeBoostersList');
+            if (data.boosters && data.boosters.length > 0) {{
                 activeDiv.innerHTML = '<h3 style="color: #ffd700; margin-bottom: 10px;">⚡ Активные бустеры:</h3>';
-                for (const b of data.boosters) {
-                    activeDiv.innerHTML += `<div class="booster-item"><div class="booster-info"><span class="booster-emoji">${b.emoji}</span><div><div class="booster-name">${b.name}</div><div class="booster-price">${b.description} | Осталось: ${b.minutes_left} мин</div></div></div></div>`;
-                }
-            } else {
+                for (var i = 0; i < data.boosters.length; i++) {{
+                    var b = data.boosters[i];
+                    activeDiv.innerHTML += '<div class="booster-item"><div class="booster-info"><span class="booster-emoji">' + b.emoji + '</span><div><div class="booster-name">' + b.name + '</div><div class="booster-price">' + b.description + ' | Осталось: ' + b.minutes_left + ' мин</div></div></div></div>';
+                }}
+            }} else {{
                 activeDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">Нет активных бустеров</div>';
-            }
-            const shopDiv = document.getElementById('shopBoostersList');
+            }}
+            var shopDiv = document.getElementById('shopBoostersList');
             shopDiv.innerHTML = '<h3 style="color: #ffd700; margin-bottom: 10px;">💎 Доступные бустеры:</h3>';
-            shopDiv.innerHTML += `<div class="booster-item"><div class="booster-info"><span class="booster-emoji">⚡</span><div><div class="booster-name">x2 Прибыль</div><div class="booster-price">Удваивает прибыль за тап на 30 минут</div></div></div><button class="booster-btn" onclick="buyBooster()">Купить за 5000</button></div>`;
-        }
+            shopDiv.innerHTML += '<div class="booster-item"><div class="booster-info"><span class="booster-emoji">⚡</span><div><div class="booster-name">x2 Прибыль</div><div class="booster-price">Удваивает прибыль за тап на 30 минут</div></div></div><button class="booster-btn" onclick="buyBooster()">Купить за 5000</button></div>';
+        }}
         
-        async function buyBooster() {
-            const res = await fetch('/api/buy_booster?user_id=' + userId + '&booster_id=1', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                tg.showPopup({ title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{ type: 'ok' }] });
+        async function buyBooster() {{
+            var res = await fetch('/api/buy_booster?user_id=' + userId + '&booster_id=1', {{ method: 'POST' }});
+            var data = await res.json();
+            if (data.success) {{
+                tg.showPopup({{ title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{{type: 'ok'}}] }});
                 await loadStats();
                 await loadBoosters();
-            } else {
-                tg.showPopup({ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{ type: 'ok' }] });
-            }
-        }
+            }} else {{
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+            }}
+        }}
         
-        // Рефералы
-        async function loadReferralData() {
-            const res = await fetch('/api/get_referrals?user_id=' + userId);
-            const data = await res.json();
+        async function loadReferralData() {{
+            var res = await fetch('/api/get_referrals?user_id=' + userId);
+            var data = await res.json();
             document.getElementById('referralCount').innerText = data.count;
-            const botUsername = 'ZetaClickerRobot';
-            const referralLink = 'https://t.me/' + botUsername + '?start=ref_' + userId;
+            var botUsername = 'ZetaClickerRobot';
+            var referralLink = 'https://t.me/' + botUsername + '?start=ref_' + userId;
             document.getElementById('referralLink').innerText = referralLink;
-            document.getElementById('copyReferralBtn').onclick = () => {
+            document.getElementById('copyReferralBtn').onclick = function() {{
                 navigator.clipboard.writeText(referralLink);
-                tg.showPopup({ title: '✅ Скопировано!', message: 'Реферальная ссылка скопирована', buttons: [{ type: 'ok' }] });
-            };
-            document.getElementById('claimReferralBtn').onclick = async () => {
-                const claimRes = await fetch('/api/claim_referral?user_id=' + userId, { method: 'POST' });
-                const claimData = await claimRes.json();
-                if (claimData.success) {
-                    tg.showPopup({ title: '🎉 Награда получена!', message: '+' + claimData.reward + ' монет!', buttons: [{ type: 'ok' }] });
+                tg.showPopup({{ title: '✅ Скопировано!', message: 'Реферальная ссылка скопирована', buttons: [{{type: 'ok'}}] }});
+            }};
+            document.getElementById('claimReferralBtn').onclick = async function() {{
+                var claimRes = await fetch('/api/claim_referral?user_id=' + userId, {{ method: 'POST' }});
+                var claimData = await claimRes.json();
+                if (claimData.success) {{
+                    tg.showPopup({{ title: '🎉 Награда получена!', message: '+' + claimData.reward + ' монет!', buttons: [{{type: 'ok'}}] }});
                     await loadStats();
                     await loadReferralData();
-                } else {
-                    tg.showPopup({ title: '❌ Нет новых рефералов', message: claimData.message, buttons: [{ type: 'ok' }] });
-                }
-            };
-        }
+                }} else {{
+                    tg.showPopup({{ title: '❌ Нет новых рефералов', message: claimData.message, buttons: [{{type: 'ok'}}] }});
+                }}
+            }};
+        }}
         
-        // Топ игроков
-        async function loadLeaderboard() {
-            const res = await fetch('/api/get_leaderboard?limit=10');
-            const data = await res.json();
-            const leaderboardList = document.getElementById('leaderboardList');
+        async function loadLeaderboard() {{
+            var res = await fetch('/api/get_leaderboard?limit=10');
+            var data = await res.json();
+            var leaderboardList = document.getElementById('leaderboardList');
             leaderboardList.innerHTML = '';
-            for (let i = 0; i < data.leaderboard.length; i++) {
-                const player = data.leaderboard[i];
-                const div = document.createElement('div');
+            for (var i = 0; i < data.leaderboard.length; i++) {{
+                var player = data.leaderboard[i];
+                var div = document.createElement('div');
                 div.className = 'leaderboard-item';
-                div.innerHTML = `<span class="leaderboard-rank">${i+1}</span><span class="leaderboard-name">${player.username}</span><span class="leaderboard-clicks">${player.clicks} кликов</span>`;
+                div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span><span class="leaderboard-name">' + player.username + '</span><span class="leaderboard-clicks">' + player.clicks + ' кликов</span>';
                 leaderboardList.appendChild(div);
-            }
-        }
+            }}
+        }}
         
-        setInterval(() => {
-            if (energy < maxEnergy) {
+        setInterval(function() {{
+            if (energy < maxEnergy) {{
                 energy = Math.min(energy + 1, maxEnergy);
                 updateUI();
-            }
-        }, 1000);
+            }}
+        }}, 1000);
         
         loadStats();
     </script>
