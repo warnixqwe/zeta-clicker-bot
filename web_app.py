@@ -19,50 +19,59 @@ async def init_db():
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY,
-            clicks BIGINT DEFAULT 0,
-            level INTEGER DEFAULT 1,
-            energy INTEGER DEFAULT 1000,
-            tap_power INTEGER DEFAULT 1,
-            current_skin TEXT DEFAULT '🦆',
-            total_clicks BIGINT DEFAULT 0,
-            gems INTEGER DEFAULT 0
+            balance BIGINT DEFAULT 0,
+            profit_per_tap INTEGER DEFAULT 1,
+            coins_for_upgrade BIGINT DEFAULT 50000000,
+            profit_per_hour BIGINT DEFAULT 229150,
+            level INTEGER DEFAULT 7,
+            max_level INTEGER DEFAULT 10,
+            boost_energy INTEGER DEFAULT 4500,
+            max_energy INTEGER DEFAULT 4500
         )
     """)
     await conn.close()
 
 async def get_user_stats(user_id: int):
     conn = await asyncpg.connect(DATABASE_URL)
-    row = await conn.fetchrow("SELECT clicks, level, energy, tap_power, current_skin, total_clicks, gems FROM users WHERE user_id = $1", user_id)
+    row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
     if not row:
-        await conn.execute("INSERT INTO users (user_id, clicks, level, energy, tap_power, current_skin, total_clicks, gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", user_id, 0, 1, 1000, 1, '🦆', 0, 0)
+        await conn.execute("""
+            INSERT INTO users (user_id, balance, profit_per_tap, coins_for_upgrade, profit_per_hour, level, max_level, boost_energy, max_energy)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """, user_id, 0, 1, 50000000, 229150, 7, 10, 4500, 4500)
         await conn.close()
-        return {"clicks": 0, "level": 1, "energy": 1000, "tap_power": 1, "skin": "🦆", "total_clicks": 0, "gems": 0}
+        return {
+            "balance": 0,
+            "profit_per_tap": 1,
+            "coins_for_upgrade": 50000000,
+            "profit_per_hour": 229150,
+            "level": 7,
+            "max_level": 10,
+            "boost_energy": 4500,
+            "max_energy": 4500
+        }
     await conn.close()
-    return {"clicks": row["clicks"], "level": row["level"], "energy": row["energy"], "tap_power": row["tap_power"], "skin": row["current_skin"], "total_clicks": row["total_clicks"], "gems": row["gems"]}
+    return {
+        "balance": row["balance"],
+        "profit_per_tap": row["profit_per_tap"],
+        "coins_for_upgrade": row["coins_for_upgrade"],
+        "profit_per_hour": row["profit_per_hour"],
+        "level": row["level"],
+        "max_level": row["max_level"],
+        "boost_energy": row["boost_energy"],
+        "max_energy": row["max_energy"]
+    }
 
-async def update_clicks(user_id: int, increment: int):
+async def update_balance(user_id: int, increment: int):
     conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute("UPDATE users SET clicks = clicks + $1, total_clicks = total_clicks + $1, energy = energy - 1 WHERE user_id = $2", increment, user_id)
+    await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", increment, user_id)
     await conn.close()
 
 @app.post("/api/click")
 async def handle_click(data: ClickData):
-    await update_clicks(data.user_id, data.clicks)
+    await update_balance(data.user_id, data.clicks)
     stats = await get_user_stats(data.user_id)
     return stats
-
-@app.post("/api/upgrade_tap")
-async def upgrade_tap(user_id: int):
-    stats = await get_user_stats(user_id)
-    price = stats["tap_power"] * 100
-    if stats["clicks"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL)
-        new_clicks = stats["clicks"] - price
-        new_tap_power = stats["tap_power"] + 1
-        await conn.execute("UPDATE users SET clicks = $1, tap_power = $2 WHERE user_id = $3", new_clicks, new_tap_power, user_id)
-        await conn.close()
-        return {"success": True, "new_tap_power": new_tap_power}
-    return {"success": False, "need": price}
 
 @app.get("/api/get_stats")
 async def get_stats(user_id: int):
@@ -85,7 +94,7 @@ async def mini_app(user_id: int = 1):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Zeta Clicker</title>
+    <title>OTMeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * {{
@@ -98,41 +107,113 @@ async def mini_app(user_id: int = 1):
         
         body {{
             min-height: 100vh;
-            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            padding: 16px;
+            padding: 20px;
         }}
         
         .container {{
-            max-width: 500px;
+            max-width: 450px;
             margin: 0 auto;
         }}
         
         /* Карточка профиля */
         .card {{
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 24px;
+            background: rgba(20, 30, 45, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 32px;
             padding: 20px;
             margin-bottom: 16px;
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         }}
         
-        .stats-row {{
+        .card-header {{
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
+            align-items: baseline;
+            margin-bottom: 16px;
         }}
         
-        .stats-label {{
-            color: rgba(255,255,255,0.7);
+        .title {{
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }}
+        
+        .badge {{
+            background: rgba(0,0,0,0.5);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #ffd700;
+        }}
+        
+        .balance-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 20px;
+        }}
+        
+        .balance-label {{
+            color: rgba(255,255,255,0.6);
             font-size: 14px;
         }}
         
-        .stats-value {{
+        .balance-value {{
+            font-size: 32px;
+            font-weight: bold;
             color: #ffd700;
-            font-size: 20px;
+        }}
+        
+        .stats-grid {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }}
+        
+        .stat-item {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        
+        .stat-label {{
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+        }}
+        
+        .stat-value {{
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }}
+        
+        .highlight {{
+            color: #ffd700;
+        }}
+        
+        .level-container {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }}
+        
+        .level-text {{
+            color: #ffd700;
+            font-weight: bold;
+        }}
+        
+        .legendary {{
+            color: #ff8c00;
             font-weight: bold;
         }}
         
@@ -155,40 +236,49 @@ async def mini_app(user_id: int = 1):
             background: linear-gradient(90deg, #00ff88, #00cc66);
             border-radius: 4px;
             transition: width 0.2s;
-            width: {stats["energy"]/10}%;
+            width: {stats["boost_energy"]/stats["max_energy"]*100}%;
         }}
         
-        /* Утка */
-        .duck-container {{
-            display: flex;
-            justify-content: center;
+        /* Tap зона */
+        .tap-area {{
+            text-align: center;
             margin: 30px 0;
         }}
         
-        .duck {{
-            font-size: 180px;
+        .coin {{
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 80px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
             cursor: pointer;
             transition: transform 0.1s ease;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+            box-shadow: 0 20px 30px rgba(0,0,0,0.3);
         }}
         
-        .duck:active {{
+        .coin:active {{
             transform: scale(0.95);
         }}
         
-        /* Сетка кнопок */
-        .grid-2 {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+        /* Кнопки */
+        .button-group {{
+            display: flex;
             gap: 12px;
-            margin-top: 20px;
+            margin: 20px 0;
         }}
         
         .btn {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            flex: 1;
+            background: linear-gradient(135deg, #2a3a5a, #1a2a4a);
             border: none;
-            border-radius: 16px;
-            padding: 16px;
+            border-radius: 24px;
+            padding: 14px;
             color: white;
             font-size: 14px;
             font-weight: 600;
@@ -199,25 +289,27 @@ async def mini_app(user_id: int = 1):
         
         .btn:active {{
             transform: scale(0.96);
-            opacity: 0.9;
         }}
         
-        .btn-full {{
+        .btn-boost {{
+            background: linear-gradient(135deg, #ff8c00, #ff4500);
+        }}
+        
+        .btn-secret {{
+            background: rgba(255,255,255,0.1);
             width: 100%;
             margin-top: 12px;
-            background: rgba(255,255,255,0.15);
         }}
         
-        /* Всплывающие числа */
         .tap-value {{
             position: fixed;
             pointer-events: none;
-            font-size: 32px;
+            font-size: 28px;
             font-weight: bold;
             color: #ffd700;
             text-shadow: 0 0 10px rgba(0,0,0,0.5);
             z-index: 1000;
-            animation: floatUp 0.8s ease-out forwards;
+            animation: floatUp 0.6s ease-out forwards;
         }}
         
         @keyframes floatUp {{
@@ -227,42 +319,45 @@ async def mini_app(user_id: int = 1):
             }}
             100% {{
                 opacity: 0;
-                transform: translateY(-100px) scale(1.5);
-            }}
-        }}
-        
-        /* Адаптация под тёмную тему Telegram */
-        @media (prefers-color-scheme: dark) {{
-            body {{
-                background: linear-gradient(135deg, #0a0a1a 0%, #0f0f1f 100%);
+                transform: translateY(-80px) scale(1.2);
             }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Карточка статистики -->
+        <!-- Карточка -->
         <div class="card">
-            <div class="stats-row">
-                <span class="stats-label">🦆 Уровень</span>
-                <span class="stats-value" id="levelValue">{stats["level"]}</span>
+            <div class="card-header">
+                <span class="title">OTMeta</span>
+                <span class="badge">60T</span>
             </div>
-            <div class="stats-row">
-                <span class="stats-label">💰 Клики</span>
-                <span class="stats-value" id="clicksValue">{stats["clicks"]}</span>
+            <div class="balance-row">
+                <span class="balance-label">💰 Баланс</span>
+                <span class="balance-value" id="balance">${stats["balance"]}</span>
             </div>
-            <div class="stats-row">
-                <span class="stats-label">💪 Сила клика</span>
-                <span class="stats-value" id="tapPowerValue">+{stats["tap_power"]}</span>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Прибыль за тап</span>
+                    <span class="stat-value highlight" id="profitPerTap">+{stats["profit_per_tap"]}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Монет для апа</span>
+                    <span class="stat-value" id="upgradeCost">{stats["coins_for_upgrade"]}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Прибыль в час</span>
+                    <span class="stat-value highlight" id="profitPerHour">+{stats["profit_per_hour"]}K</span>
+                </div>
             </div>
-            <div class="stats-row">
-                <span class="stats-label">💎 Алмазы</span>
-                <span class="stats-value" id="gemsValue">{stats["gems"]}</span>
+            <div class="level-container">
+                <span class="level-text">Legendary</span>
+                <span class="legendary">Level {stats["level"]}/{stats["max_level"]}</span>
             </div>
             <div class="energy-container">
-                <div class="stats-row">
-                    <span class="stats-label">⚡ Энергия</span>
-                    <span class="stats-value" id="energyValue">{stats["energy"]}/1000</span>
+                <div class="stat-item">
+                    <span class="stat-label">Boost Energy</span>
+                    <span class="stat-value" id="energyValue">{stats["boost_energy"]} / {stats["max_energy"]}</span>
                 </div>
                 <div class="energy-bar">
                     <div class="energy-fill" id="energyFill"></div>
@@ -270,20 +365,17 @@ async def mini_app(user_id: int = 1):
             </div>
         </div>
         
-        <!-- Утка -->
-        <div class="duck-container">
-            <div class="duck" id="duck">{stats["skin"]}</div>
+        <!-- Кликабельная монета -->
+        <div class="tap-area">
+            <div class="coin" id="coin">💰</div>
         </div>
         
         <!-- Кнопки -->
-        <div class="grid-2">
-            <button class="btn" id="upgradeBtn">💪 Улучшить тап</button>
-            <button class="btn" id="dailyBtn">🎁 Ежедневный</button>
-            <button class="btn" id="shopBtn">👕 Магазин</button>
-            <button class="btn" id="profileBtn">📊 Профиль</button>
+        <div class="button-group">
+            <button class="btn" id="upgradeBtn">⬆️ Улучшить</button>
+            <button class="btn btn-boost" id="boostBtn">⚡ Boost</button>
         </div>
-        
-        <button class="btn btn-full" id="closeBtn">✖️ Закрыть</button>
+        <button class="btn btn-secret" id="secretBtn">❓ как забрать секретный</button>
     </div>
     
     <script>
@@ -292,31 +384,36 @@ async def mini_app(user_id: int = 1):
         tg.expand();
         
         const userId = new URLSearchParams(window.location.search).get('user_id') || 1;
-        let clicks = {stats["clicks"]};
+        let balance = {stats["balance"]};
+        let profitPerTap = {stats["profit_per_tap"]};
+        let upgradeCost = {stats["coins_for_upgrade"]};
+        let profitPerHour = {stats["profit_per_hour"]};
         let level = {stats["level"]};
-        let tapPower = {stats["tap_power"]};
-        let energy = {stats["energy"]};
-        let gems = {stats["gems"]};
-        let maxEnergy = 1000;
+        let maxLevel = {stats["max_level"]};
+        let boostEnergy = {stats["boost_energy"]};
+        let maxEnergy = {stats["max_energy"]};
         
         function updateUI() {{
-            document.getElementById('clicksValue').innerText = clicks;
-            document.getElementById('levelValue').innerText = level;
-            document.getElementById('tapPowerValue').innerText = '+' + tapPower;
-            document.getElementById('energyValue').innerText = Math.floor(energy) + '/1000';
-            document.getElementById('gemsValue').innerText = gems;
-            document.getElementById('energyFill').style.width = (energy / 10) + '%';
+            document.getElementById('balance').innerText = balance;
+            document.getElementById('profitPerTap').innerText = '+' + profitPerTap;
+            document.getElementById('upgradeCost').innerText = upgradeCost;
+            document.getElementById('profitPerHour').innerText = '+' + profitPerHour + 'K';
+            document.getElementById('energyValue').innerText = boostEnergy + ' / ' + maxEnergy;
+            document.getElementById('energyFill').style.width = (boostEnergy / maxEnergy * 100) + '%';
         }}
         
         async function loadStats() {{
             try {{
                 const res = await fetch('/api/get_stats?user_id=' + userId);
                 const data = await res.json();
-                clicks = data.clicks;
+                balance = data.balance;
+                profitPerTap = data.profit_per_tap;
+                upgradeCost = data.coins_for_upgrade;
+                profitPerHour = data.profit_per_hour;
                 level = data.level;
-                tapPower = data.tap_power;
-                energy = data.energy;
-                gems = data.gems;
+                maxLevel = data.max_level;
+                boostEnergy = data.boost_energy;
+                maxEnergy = data.max_energy;
                 updateUI();
             }} catch(e) {{
                 console.error('Load stats error:', e);
@@ -328,14 +425,14 @@ async def mini_app(user_id: int = 1):
                 const res = await fetch('/api/click', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ user_id: userId, clicks: tapPower }})
+                    body: JSON.stringify({{ user_id: userId, clicks: profitPerTap }})
                 }});
                 const data = await res.json();
-                clicks = data.clicks;
-                level = data.level;
-                tapPower = data.tap_power;
-                energy = data.energy;
-                gems = data.gems;
+                balance = data.balance;
+                profitPerTap = data.profit_per_tap;
+                upgradeCost = data.coins_for_upgrade;
+                profitPerHour = data.profit_per_hour;
+                boostEnergy = data.boost_energy;
                 updateUI();
             }} catch(e) {{
                 console.error('Click error:', e);
@@ -349,79 +446,39 @@ async def mini_app(user_id: int = 1):
             el.style.left = x + 'px';
             el.style.top = y + 'px';
             document.body.appendChild(el);
-            setTimeout(() => el.remove(), 800);
+            setTimeout(() => el.remove(), 600);
         }}
         
-        document.getElementById('duck').onclick = async (e) => {{
-            if (energy <= 0) {{
-                tg.showPopup({{
-                    title: '😫 Нет энергии!',
-                    message: 'Подожди, энергия восстановится.',
-                    buttons: [{{type: 'ok'}}]
-                }});
+        document.getElementById('coin').onclick = async (e) => {{
+            if (boostEnergy <= 0) {{
+                tg.showPopup({{ title: '😫 Нет энергии!', message: 'Подожди, энергия восстановится.', buttons: [{{type: 'ok'}}] }});
                 return;
             }}
             const rect = e.target.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top;
-            showFloatingNumber(x, y, tapPower);
-            energy -= 1;
+            showFloatingNumber(x, y, profitPerTap);
+            boostEnergy -= 1;
             updateUI();
             await sendClick();
         }};
         
         document.getElementById('upgradeBtn').onclick = async () => {{
-            const price = tapPower * 100;
-            if (clicks >= price) {{
-                const res = await fetch('/api/upgrade_tap?user_id=' + userId, {{method: 'POST'}});
-                const data = await res.json();
-                if (data.success) {{
-                    tg.showPopup({{
-                        title: '✅ Улучшено!',
-                        message: 'Сила клика: +' + data.new_tap_power,
-                        buttons: [{{type: 'ok'}}]
-                    }});
-                    await loadStats();
-                }}
-            }} else {{
-                tg.showPopup({{
-                    title: '❌ Не хватает кликов',
-                    message: 'Нужно: ' + price + ' кликов',
-                    buttons: [{{type: 'ok'}}]
-                }});
-            }}
+            tg.showPopup({{ title: '⬆️ Улучшение', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
         }};
         
-        document.getElementById('dailyBtn').onclick = async () => {{
-            tg.showPopup({{
-                title: '🎁 Ежедневный бонус',
-                message: 'Скоро появится!',
-                buttons: [{{type: 'ok'}}]
-            }});
+        document.getElementById('boostBtn').onclick = async () => {{
+            tg.showPopup({{ title: '⚡ Boost', message: 'Скоро будет!', buttons: [{{type: 'ok'}}] }});
         }};
         
-        document.getElementById('shopBtn').onclick = async () => {{
-            tg.showPopup({{
-                title: '👕 Магазин',
-                message: 'Скоро тут будут скины!',
-                buttons: [{{type: 'ok'}}]
-            }});
+        document.getElementById('secretBtn').onclick = async () => {{
+            tg.showPopup({{ title: '❓ Секретный бонус', message: 'Следи за новостями в канале!', buttons: [{{type: 'ok'}}] }});
         }};
-        
-        document.getElementById('profileBtn').onclick = async () => {{
-            tg.showPopup({{
-                title: '📊 Профиль',
-                message: 'Клики: ' + clicks + '\\nУровень: ' + level + '\\nСила клика: +' + tapPower + '\\nАлмазы: ' + gems,
-                buttons: [{{type: 'ok'}}]
-            }});
-        }};
-        
-        document.getElementById('closeBtn').onclick = () => tg.close();
         
         // Восстановление энергии (1 в секунду)
         setInterval(() => {{
-            if (energy < maxEnergy) {{
-                energy = Math.min(energy + 1, maxEnergy);
+            if (boostEnergy < maxEnergy) {{
+                boostEnergy = Math.min(boostEnergy + 1, maxEnergy);
                 updateUI();
             }}
         }}, 1000);
