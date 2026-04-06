@@ -522,7 +522,7 @@ async def mini_app(user_id: int = 1):
         body {{
             min-height: 100vh;
             background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             padding-bottom: 80px;
         }}
         
