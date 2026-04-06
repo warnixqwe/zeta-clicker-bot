@@ -41,6 +41,18 @@ async def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Добавь эти колонки при создании таблицы
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS referrals (
+            referrer_id BIGINT,
+            referred_id BIGINT PRIMARY KEY,
+            reward_claimed INTEGER DEFAULT 0,
+            bonus_claimed INTEGER DEFAULT 0,
+            referred_tap_power INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     
     # Таблица скинов
     await conn.execute("""
@@ -385,17 +397,40 @@ async def claim_daily_bonus(user_id: int) -> Tuple[int, int]:
     await conn.close()
     return (bonus, daily_streak)
 
-async def add_referral(referrer_id: int, referred_id: int) -> bool:
-    conn = await get_connection()
+async def add_referral(user_id: int, referrer_id: int) -> bool:
+    if user_id == referrer_id:
+        return False
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     try:
+        # Получаем силу тапа реферала при регистрации
+        tap_power = 1
         await conn.execute("""
-            INSERT INTO referrals (referrer_id, referred_id) VALUES ($1, $2)
-        """, referrer_id, referred_id)
+            INSERT INTO referrals (referrer_id, referred_id, referred_tap_power) 
+            VALUES ($1, $2, $3)
+        """, referrer_id, user_id, tap_power)
+        # Базовая награда 1000 монет сразу
+        await conn.execute("UPDATE users SET balance = balance + 1000 WHERE user_id = $1", referrer_id)
         await conn.close()
         return True
     except:
         await conn.close()
         return False
+    
+async def check_referral_bonus(user_id: int, new_tap_power: int):
+    """Проверяем, не прокачал ли реферал силу тапа до 10 уровня"""
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    
+    # Находим, кто пригласил этого пользователя
+    referrer = await conn.fetchval("""
+        SELECT referrer_id FROM referrals WHERE referred_id = $1 AND bonus_claimed = 0
+    """, user_id)
+    
+    if referrer and new_tap_power >= 10:
+        # Начисляем бонус пригласившему (+5000 монет за активного друга)
+        await conn.execute("UPDATE users SET balance = balance + 5000 WHERE user_id = $1", referrer)
+        await conn.execute("UPDATE referrals SET bonus_claimed = 1 WHERE referred_id = $1", user_id)
+    
+    await conn.close()
 
 async def claim_referral_reward(referrer_id: int) -> int:
     conn = await get_connection()
@@ -494,6 +529,23 @@ async def upgrade_tap_power(user_id: int) -> Tuple[bool, int, int]:
     
     await conn.close()
     return (False, row['tap_power'], price)
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    stats = await get_user_stats(user_id)
+    price = stats["profit_per_tap"] * 100
+    if stats["balance"] >= price:
+        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+        new_balance = stats["balance"] - price
+        new_profit = stats["profit_per_tap"] + 1
+        await conn.execute("UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3", new_balance, new_profit, user_id)
+        await conn.close()
+        
+        # Проверяем, не пора ли дать бонус пригласившему
+        await check_referral_bonus(user_id, new_profit)
+        
+        return {"success": True, "new_tap_power": new_profit}
+    return {"success": False, "need": price}
 
 async def upgrade_passive_income(user_id: int) -> Tuple[bool, int, int]:
     conn = await get_connection()

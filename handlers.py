@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from aiogram import Router, types, Bot
@@ -394,3 +395,17 @@ async def handle_game(callback: types.CallbackQuery):
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
+
+@router.message(lambda message: message.web_app_data is not None)
+async def handle_share(message: types.Message):
+    data = json.loads(message.web_app_data.data)
+    if data.get('action') == 'share':
+        user_id = data.get('user_id')
+        # Генерируем ссылку на картинку
+        image_url = f"https://zeta-clicker-bot-production-3a3b.up.railway.app/api/share_image?user_id={user_id}"
+        
+        # Отправляем картинку с подписью
+        await message.answer_photo(
+            photo=image_url,
+            caption=f"🦆 Я накликал {data.get('balance', 0)} монет в Zeta Clicker!\nПрисоединяйся: t.me/ZetaClickerRobot?start=ref_{user_id}"
+        )

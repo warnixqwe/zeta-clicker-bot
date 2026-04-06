@@ -502,6 +502,43 @@ async def startup():
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = await get_user_stats(user_id)
+
+    from PIL import Image, ImageDraw, ImageFont
+import io
+from fastapi.responses import Response
+import aiohttp
+
+@app.get("/api/share_image")
+async def share_image(user_id: int):
+    stats = await get_user_stats(user_id)
+    
+    # Создаём изображение 500x500
+    img = Image.new('RGB', (500, 500), color='#0a0f1e')
+    draw = ImageDraw.Draw(img)
+    
+    # Загружаем шрифт (можно использовать стандартный)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+    except:
+        font = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    
+    # Рисуем утку (эмодзи не отрисовать, пишем текст)
+    draw.text((250, 100), "🦆", fill="white", anchor="mm", font=font)
+    
+    # Текст
+    draw.text((250, 200), f"Баланс: {stats['balance']} монет", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 250), f"Уровень: {stats['level']}", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 300), f"Скин: {stats['current_skin']}", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 400), "Zeta Clicker", fill="white", anchor="mm", font=font)
+    
+    # Сохраняем в байты
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    
+    return Response(content=img_byte_arr.getvalue(), media_type="image/png")
     
     html = f"""
 <!DOCTYPE html>
@@ -872,6 +909,7 @@ async def mini_app(user_id: int = 1):
             <div class="card">
                 <div class="title">Zeta Clicker</div>
                 <div class="balance-row">
+                <button class="btn" id="shareBtn">📤 Поделиться</button>
                     <span class="balance-label">💰 Баланс</span>
                     <span class="balance-value" id="balance">{stats["balance"]}</span>
                 </div>
@@ -1287,6 +1325,27 @@ async def mini_app(user_id: int = 1):
         }}, 2000);
         
         loadStats();
+
+        document.getElementById('shareBtn').onclick = async function() {
+    // Генерируем картинку
+    var imgUrl = '/api/share_image?user_id=' + userId;
+    
+    // Показываем попап с картинкой и кнопкой поделиться
+    tg.showPopup({
+        title: '📤 Поделиться прогрессом',
+        message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
+        buttons: [
+            {type: 'default', text: '📤 Поделиться'},
+            {type: 'cancel', text: 'Отмена'}
+        ]
+    }, function(buttonId) {
+        if (buttonId === '0') {
+            // Отправляем картинку в Telegram
+            tg.sendData(JSON.stringify({ action: 'share', user_id: userId }));
+        }
+    });
+};
+
     </script>
 </body>
 </html>
