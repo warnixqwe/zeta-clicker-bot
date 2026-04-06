@@ -38,24 +38,13 @@ async def cmd_start(message: types.Message):
                 pass
             conn.close()
     
-    # Кнопка для входа в Mini App
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🎮 Войти в игру", 
-            web_app=WebAppInfo(url=f"https://zeta-clicker-bot-production-3a3b.up.railway.app/?user_id={user_id}")
-        )]
+        [InlineKeyboardButton(text="🎮 Войти в игру", web_app=WebAppInfo(url=f"https://zeta-clicker-bot-2.up.railway.app/?user_id={user_id}"))]
     ])
     
     await message.answer(
         "🦆 **Добро пожаловать в Zeta Clicker!**\n\n"
         "💰 Кликай по утке, зарабатывай монеты, открывай кейсы, покупай скины и улучшай прибыль!\n\n"
-        "🔥 **Что тебя ждёт:**\n"
-        "• 🦆 Кликай по утке и зарабатывай\n"
-        "• 📦 Открывай кейсы с крутыми наградами\n"
-        "• 👕 Покупай скины для утки\n"
-        "• ⚡ Активируй бустеры для удвоения прибыли\n"
-        "• 👥 Приглашай друзей и получай бонусы\n"
-        "• 🏆 Соревнуйся в топе игроков\n\n"
         "👇 **Нажми на кнопку ниже, чтобы начать игру!**",
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -64,7 +53,7 @@ async def cmd_start(message: types.Message):
 @router.message(Command("game"))
 async def cmd_game(message: types.Message):
     user_id = message.from_user.id
-    base_url = "https://zeta-clicker-bot-production-3a3b.up.railway.app"
+    base_url = "https://zeta-clicker-bot-2.up.railway.app"
     web_app_url = f"{base_url}/?user_id={user_id}"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -72,12 +61,39 @@ async def cmd_game(message: types.Message):
     ])
     
     await message.answer(
-        "🦆 **Zeta Clicker — Mini App версия!**\n\n"
-        "Нажми на кнопку ниже, чтобы открыть игру с живыми анимациями!\n\n"
-        "🚀 **Погнали!**",
+        "🦆 **Zeta Clicker — Mini App версия!**\n\nНажми на кнопку ниже, чтобы открыть игру!",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
+
+@router.message(lambda message: message.text == ".з")
+async def dot_z_command(message: types.Message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_ID:
+        await message.answer("⛔ Нет прав!")
+        return
+    await cmd_admin(message)
+
+# ==================== АДМИН-ПАНЕЛЬ ====================
+
+def get_admin_keyboard():
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+        InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")
+    )
+    keyboard.add(
+        InlineKeyboardButton(text="💰 Добавить монеты", callback_data="admin_add_clicks"),
+        InlineKeyboardButton(text="💎 Добавить алмазы", callback_data="admin_add_gems")
+    )
+    keyboard.add(
+        InlineKeyboardButton(text="🎁 Награда админа", callback_data="admin_reward"),
+        InlineKeyboardButton(text="📋 Список пользователей", callback_data="admin_users")
+    )
+    keyboard.add(
+        InlineKeyboardButton(text="◀️ На главную", callback_data="main_menu")
+    )
+    return keyboard
 
 @router.message(Command("admin"))
 async def cmd_admin(message: types.Message):
@@ -86,16 +102,9 @@ async def cmd_admin(message: types.Message):
         await message.answer("⛔ **У тебя нет прав администратора!**", parse_mode="Markdown")
         return
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="💰 Добавить монеты", callback_data="admin_add_clicks")],
-        [InlineKeyboardButton(text="◀️ На главную", callback_data="main_menu")]
-    ])
-    
     await message.answer(
         "👑 **Админ-панель**\n\nВыбери действие:",
-        reply_markup=keyboard,
+        reply_markup=get_admin_keyboard(),
         parse_mode="Markdown"
     )
 
@@ -122,7 +131,7 @@ async def admin_stats(callback: types.CallbackQuery):
         f"💰 Всего монет: `{total_balance}`\n"
     )
     
-    await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @router.callback_query(lambda c: c.data == "admin_broadcast")
@@ -132,10 +141,8 @@ async def admin_broadcast_start(callback: types.CallbackQuery, state: FSMContext
         return
     
     await callback.message.edit_text(
-        "📢 **Рассылка**\n\n"
-        "Отправь сообщение для рассылки (текст, фото, видео).\n"
-        "Для отмены отправь `/cancel`",
-        reply_markup=get_back_keyboard(),
+        "📢 **Рассылка**\n\nОтправь сообщение для рассылки.\nДля отмены отправь `/cancel`",
+        reply_markup=get_admin_keyboard(),
         parse_mode="Markdown"
     )
     await state.set_state(BroadcastState.waiting_for_message)
@@ -144,7 +151,7 @@ async def admin_broadcast_start(callback: types.CallbackQuery, state: FSMContext
 @router.message(Command("cancel"))
 async def cancel_broadcast(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Действие отменено.", reply_markup=get_main_keyboard())
+    await message.answer("❌ Действие отменено.")
 
 @router.message(BroadcastState.waiting_for_message)
 async def process_broadcast(message: types.Message, state: FSMContext):
@@ -178,11 +185,49 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     
     await state.clear()
     await message.answer(
-        f"✅ **Рассылка завершена!**\n"
-        f"✅ Успешно: `{success}`\n"
-        f"❌ Ошибок: `{fail}`",
+        f"✅ **Рассылка завершена!**\n✅ Успешно: `{success}`\n❌ Ошибок: `{fail}`",
         parse_mode="Markdown"
     )
+
+    @router.callback_query(lambda c: c.data == "admin_add_gems")
+async def admin_add_gems_start(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет прав!", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "💎 **Добавление алмазов**\n\n"
+        "Отправь ID пользователя и количество алмазов через пробел.\n"
+        "Пример: `123456789 100`\n\n"
+        "Для отмены отправь `/cancel`",
+        reply_markup=get_admin_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.message(lambda message: message.from_user.id == ADMIN_ID and not message.text.startswith('/'))
+async def admin_add_gems_process(message: types.Message):
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        await message.answer("❌ Неверный формат! Используй: `ID количество`\nПример: `123456789 100`", parse_mode="Markdown")
+        return
+    
+    user_id = int(parts[0])
+    amount = int(parts[1])
+    
+    conn = sqlite3.connect("zeta_clicker.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+    if not cursor.fetchone():
+        await message.answer(f"❌ Пользователь с ID `{user_id}` не найден!", parse_mode="Markdown")
+        conn.close()
+        return
+    
+    cursor.execute("UPDATE users SET gems = gems + ? WHERE user_id = ?", (amount, user_id))
+    conn.commit()
+    conn.close()
+    
+    await message.answer(f"✅ Пользователю `{user_id}` начислено `{amount}` алмазов!", parse_mode="Markdown")
 
 @router.callback_query(lambda c: c.data == "admin_add_clicks")
 async def admin_add_clicks_start(callback: types.CallbackQuery):
@@ -191,11 +236,8 @@ async def admin_add_clicks_start(callback: types.CallbackQuery):
         return
     
     await callback.message.edit_text(
-        "💰 **Добавление монет**\n\n"
-        "Отправь ID пользователя и количество монет через пробел.\n"
-        "Пример: `123456789 1000`\n\n"
-        "Для отмены отправь `/cancel`",
-        reply_markup=get_back_keyboard(),
+        "💰 **Добавление монет**\n\nОтправь ID пользователя и количество монет через пробел.\nПример: `123456789 1000`\n\nДля отмены отправь `/cancel`",
+        reply_markup=get_admin_keyboard(),
         parse_mode="Markdown"
     )
     await callback.answer()
@@ -204,7 +246,7 @@ async def admin_add_clicks_start(callback: types.CallbackQuery):
 async def admin_add_clicks_process(message: types.Message):
     parts = message.text.split()
     if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
-        await message.answer("❌ Неверный формат! Используй: `ID количество`\nПример: `123456789 1000`", parse_mode="Markdown")
+        await message.answer("❌ Неверный формат! Используй: `ID количество`", parse_mode="Markdown")
         return
     
     user_id = int(parts[0])
@@ -222,6 +264,73 @@ async def admin_add_clicks_process(message: types.Message):
     conn.close()
     
     await message.answer(f"✅ Пользователю `{user_id}` начислено `{amount}` монет!", parse_mode="Markdown")
+
+@router.callback_query(lambda c: c.data == "admin_reward")
+async def admin_reward(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет прав!", show_alert=True)
+        return
+    
+    conn = sqlite3.connect("zeta_clicker.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET balance = balance + 100000, total_clicks = total_clicks + 100000 WHERE user_id = ?", (ADMIN_ID,))
+    conn.commit()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (ADMIN_ID,))
+    new_balance = cursor.fetchone()[0]
+    conn.close()
+    
+    await callback.message.edit_text(
+        f"✅ **Награда получена!**\n\n💰 Тебе начислено `100000` монет!\n💎 Твой баланс: `{new_balance}` монет",
+        reply_markup=get_admin_keyboard(),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data == "admin_users")
+async def admin_users(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Нет прав!", show_alert=True)
+        return
+    
+    conn = sqlite3.connect("zeta_clicker.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, balance, total_clicks, profit_per_tap, gems FROM users ORDER BY balance DESC LIMIT 10")
+    users = cursor.fetchall()
+    conn.close()
+    
+    if not users:
+        text = "📋 **Список пользователей**\n\nПока никого нет"
+    else:
+        text = "📋 **Топ-10 пользователей**\n\n"
+        for i, (user_id, balance, clicks, tap_power, gems) in enumerate(users, 1):
+            # Пробуем получить username через API бота
+            username = str(user_id)
+            try:
+                user = await bot.get_chat(user_id)
+                if user.username:
+                    username = f"@{user.username}"
+                elif user.first_name:
+                    username = user.first_name
+            except:
+                pass
+            
+            text += f"{i}. {username}\n"
+            text += f"   🆔 ID: `{user_id}`\n"
+            text += f"   💰 Баланс: `{balance}`\n"
+            text += f"   💎 Алмазы: `{gems}`\n"
+            text += f"   📊 Кликов: `{clicks}`\n"
+            text += f"   💪 Сила: `+{tap_power}`\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+    await callback.answer()
+
+    @router.message(lambda message: message.text == ".з")
+async def dot_z_command(message: types.Message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_ID:
+        await message.answer("⛔ Нет прав!")
+        return
+    await cmd_admin(message)
 
 # ==================== КЛАВИАТУРЫ ====================
 
@@ -243,8 +352,7 @@ def get_back_keyboard():
 @router.callback_query(lambda c: c.data == "main_menu")
 async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.edit_text(
-        "🦆 **Zeta Clicker**\n\n"
-        "👇 **Выбери действие:**",
+        "🦆 **Zeta Clicker**\n\n👇 **Выбери действие:**",
         reply_markup=get_main_keyboard(),
         parse_mode="Markdown"
     )
@@ -278,7 +386,7 @@ async def handle_profile(callback: types.CallbackQuery):
 @router.callback_query(lambda c: c.data == "game")
 async def handle_game(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    base_url = "https://zeta-clicker-bot-production-3a3b.up.railway.app"
+    base_url = "https://zeta-clicker-bot-2.up.railway.app"
     web_app_url = f"{base_url}/?user_id={user_id}"
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -286,9 +394,7 @@ async def handle_game(callback: types.CallbackQuery):
     ])
     
     await callback.message.edit_text(
-        "🦆 **Zeta Clicker — Mini App версия!**\n\n"
-        "Нажми на кнопку ниже, чтобы открыть игру с живыми анимациями!\n\n"
-        "🚀 **Погнали!**",
+        "🦆 **Zeta Clicker — Mini App версия!**\n\nНажми на кнопку ниже, чтобы открыть игру!",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )

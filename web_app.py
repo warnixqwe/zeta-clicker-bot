@@ -18,7 +18,7 @@ class ClickData(BaseModel):
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     
-    # Сначала удаляем таблицы, которые зависят от других (правильный порядок!)
+    # Удаляем таблицы в правильном порядке (сначала зависимые)
     await conn.execute("DROP TABLE IF EXISTS user_boosters")
     await conn.execute("DROP TABLE IF EXISTS user_skins")
     await conn.execute("DROP TABLE IF EXISTS case_rewards")
@@ -30,7 +30,7 @@ async def init_db():
     await conn.execute("DROP TABLE IF EXISTS cases")
     await conn.execute("DROP TABLE IF EXISTS users")
     
-    # Теперь создаём таблицы заново
+    # Создаём таблицу users
     await conn.execute("""
         CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
@@ -47,6 +47,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу referrals
     await conn.execute("""
         CREATE TABLE referrals (
             referrer_id BIGINT,
@@ -56,6 +57,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу skins
     await conn.execute("""
         CREATE TABLE skins (
             id SERIAL PRIMARY KEY,
@@ -67,6 +69,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу user_skins
     await conn.execute("""
         CREATE TABLE user_skins (
             user_id BIGINT,
@@ -75,6 +78,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу cases
     await conn.execute("""
         CREATE TABLE cases (
             id SERIAL PRIMARY KEY,
@@ -85,6 +89,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу case_rewards (с ON DELETE CASCADE)
     await conn.execute("""
         CREATE TABLE case_rewards (
             id SERIAL PRIMARY KEY,
@@ -96,6 +101,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу boosters
     await conn.execute("""
         CREATE TABLE boosters (
             id SERIAL PRIMARY KEY,
@@ -110,6 +116,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу user_boosters
     await conn.execute("""
         CREATE TABLE user_boosters (
             user_id BIGINT,
@@ -119,6 +126,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу achievements
     await conn.execute("""
         CREATE TABLE achievements (
             id SERIAL PRIMARY KEY,
@@ -131,6 +139,7 @@ async def init_db():
         )
     """)
     
+    # Создаём таблицу user_achievements
     await conn.execute("""
         CREATE TABLE user_achievements (
             user_id BIGINT,
@@ -142,70 +151,56 @@ async def init_db():
         )
     """)
     
-    # Остальной код добавления скинов, кейсов и бустеров остаётся без изменений...
-    # (оставь всё как было после создания таблиц)
+    # ==================== ДОБАВЛЯЕМ ДАННЫЕ ====================
     
-    await conn.executemany("""
-        INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)
-    """, [
-        ('Обычная утка', '🦆', 0, 0, 0),
-        ('Золотая утка', '🌟', 5000, 0, 2),
-        ('Киберутка', '🤖', 15000, 0, 5),
-        ('Утка-призрак', '👻', 30000, 0, 10),
-        ('Дьявольская утка', '😈', 50000, 0, 15),
-    ])
+    # Добавляем скины
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Обычная утка', '🦆', 0, 0, 0)
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Золотая утка', '🌟', 5000, 0, 2)
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Киберутка', '🤖', 15000, 0, 5)
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Утка-призрак', '👻', 30000, 0, 10)
+    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Дьявольская утка', '😈', 50000, 0, 15)
     
-    # Обычный кейс
+    # Добавляем кейсы
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Обычный кейс', '📦', 1000, 0)
-    case_id = await conn.fetchval("SELECT lastval()")
-    await conn.executemany("""
-        INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES ($1, $2, $3, $4, $5)
-    """, [
-        (case_id, 'clicks', 100, '100 монет', 30),
-        (case_id, 'clicks', 500, '500 монет', 20),
-        (case_id, 'clicks', 1000, '1000 монет', 15),
-        (case_id, 'gems', 1, '1 алмаз 💎', 15),
-        (case_id, 'gems', 5, '5 алмазов 💎', 8),
-        (case_id, 'booster', 1, 'x2 прибыль (30 мин)', 5),
-        (case_id, 'skin', 2, 'Золотая утка 🌟', 2),
-    ])
+    
+    # Добавляем награды для обычного кейса
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 100, '100 монет', 30)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 500, '500 монет', 20)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 1000, '1000 монет', 15)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'gems', 1, '1 алмаз 💎', 15)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'gems', 5, '5 алмазов 💎', 8)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'booster', 1, 'x2 прибыль (30 мин)', 5)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'skin', 2, 'Золотая утка 🌟', 2)")
     
     # Золотой кейс
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Золотой кейс', '🎁', 10000, 10)
-    case_id = await conn.fetchval("SELECT lastval()")
-    await conn.executemany("""
-        INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES ($1, $2, $3, $4, $5)
-    """, [
-        (case_id, 'clicks', 5000, '5000 монет', 25),
-        (case_id, 'clicks', 10000, '10000 монет', 20),
-        (case_id, 'gems', 5, '5 алмазов 💎', 15),
-        (case_id, 'gems', 10, '10 алмазов 💎', 10),
-        (case_id, 'gems', 25, '25 алмазов 💎', 5),
-        (case_id, 'booster', 1, 'x2 прибыль (30 мин)', 5),
-        (case_id, 'skin', 3, 'Киберутка 🤖', 3),
-    ])
+    
+    # Добавляем награды для золотого кейса
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'clicks', 5000, '5000 монет', 25)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'clicks', 10000, '10000 монет', 20)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'gems', 5, '5 алмазов 💎', 15)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'gems', 10, '10 алмазов 💎', 10)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'gems', 25, '25 алмазов 💎', 5)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'booster', 1, 'x2 прибыль (30 мин)', 5)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'skin', 3, 'Киберутка 🤖', 3)")
     
     # Алмазный кейс
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Алмазный кейс', '💎', 50000, 50)
-    case_id = await conn.fetchval("SELECT lastval()")
-    await conn.executemany("""
-        INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES ($1, $2, $3, $4, $5)
-    """, [
-        (case_id, 'clicks', 25000, '25000 монет', 20),
-        (case_id, 'clicks', 50000, '50000 монет', 15),
-        (case_id, 'gems', 10, '10 алмазов 💎', 20),
-        (case_id, 'gems', 25, '25 алмазов 💎', 15),
-        (case_id, 'gems', 50, '50 алмазов 💎', 10),
-        (case_id, 'skin', 4, 'Утка-призрак 👻', 5),
-        (case_id, 'skin', 5, 'Дьявольская утка 😈', 3),
-    ])
     
-    await conn.executemany("""
-        INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    """, [
-        ('x2 Прибыль', '⚡', 'Удваивает прибыль за тап на 30 минут', 'tap_multiplier', 2, 30, 5000, 0),
-        ('Энергетик', '🔋', 'Восстанавливает 500 энергии', 'energy', 500, 0, 2000, 0),
-    ])
+    # Добавляем награды для алмазного кейса
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'clicks', 25000, '25000 монет', 20)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'clicks', 50000, '50000 монет', 15)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'gems', 10, '10 алмазов 💎', 20)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'gems', 25, '25 алмазов 💎', 15)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'gems', 50, '50 алмазов 💎', 10)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'skin', 4, 'Утка-призрак 👻', 5)")
+    await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'skin', 5, 'Дьявольская утка 😈', 3)")
+    
+    # Добавляем бустеры
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 
+                       'x2 Прибыль', '⚡', 'Удваивает прибыль за тап на 30 минут', 'tap_multiplier', 2, 30, 5000, 0)
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 
+                       'Энергетик', '🔋', 'Восстанавливает 500 энергии', 'energy', 500, 0, 2000, 0)
     
     await conn.close()
 
