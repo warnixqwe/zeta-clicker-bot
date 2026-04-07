@@ -1,11 +1,13 @@
 import os
 import asyncpg
 import random
+import io
 from datetime import datetime, timedelta
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 import uvicorn
+from PIL import Image, ImageDraw, ImageFont
 
 app = FastAPI()
 
@@ -22,6 +24,7 @@ async def get_connection():
 
 async def init_db():
     conn = await get_connection()
+    # Удаляем старые таблицы
     await conn.execute("DROP TABLE IF EXISTS user_boosters")
     await conn.execute("DROP TABLE IF EXISTS user_skins")
     await conn.execute("DROP TABLE IF EXISTS case_rewards")
@@ -399,6 +402,154 @@ async def get_leaderboard(limit: int = 10):
         leaderboard.append({"user_id": user_id, "username": username, "balance": row["balance"], "clicks": row["total_clicks"]})
     return leaderboard
 
+# ==================== API ЭНДПОИНТЫ ====================
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    multiplier = await get_booster_multiplier(data.user_id)
+    final_clicks = int(data.clicks * multiplier)
+    await update_clicks(data.user_id, final_clicks)
+    stats = await get_user_stats(data.user_id)
+    return {
+        "balance": stats["balance"],
+        "profit_per_tap": stats["profit_per_tap"],
+        "profit_per_hour": stats["profit_per_hour"],
+        "energy": stats["energy"],
+        "gems": stats["gems"],
+        "current_skin": stats["current_skin"]
+    }
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+    success, new_power, price = await upgrade_tap_power(user_id)
+    if success:
+        return {"success": True, "new_tap_power": new_power}
+    return {"success": False, "need": price}
+
+@app.post("/api/upgrade_hourly")
+async def upgrade_hourly(user_id: int):
+    success, new_hourly, price = await upgrade_hourly(user_id)
+    if success:
+        return {"success": True, "new_hourly": new_hourly}
+    return {"success": False, "need": price}
+
+@app.post("/api/claim_daily")
+async def claim_daily(user_id: int):
+    success, bonus, streak = await claim_daily(user_id)
+    if success:
+        return {"success": True, "bonus": bonus, "streak": streak}
+    return {"success": False, "message": "Уже забирал сегодня"}
+
+@app.post("/api/collect_passive")
+async def collect_passive(user_id: int):
+    success, earned = await collect_passive(user_id)
+    if success:
+        return {"success": True, "earned": earned}
+    return {"success": False, "message": "Нет пассивного дохода"}
+
+@app.post("/api/open_case")
+async def open_case_api(user_id: int, case_id: int = 1):
+    success, reward_text, case_emoji, _ = await open_case(user_id, case_id)
+    if success:
+        return {"success": True, "reward_text": reward_text, "case_emoji": case_emoji}
+    return {"success": False, "need": 0, "currency": "монет"}
+
+@app.get("/api/get_cases")
+async def get_cases_api():
+    cases = await get_cases()
+    return {"cases": cases}
+
+@app.post("/api/buy_booster")
+async def buy_booster_api(user_id: int):
+    success, name, emoji = await buy_booster(user_id)
+    if success:
+        return {"success": True, "booster_name": name, "booster_emoji": emoji}
+    return {"success": False, "need": 5000}
+
+@app.get("/api/get_boosters")
+async def get_boosters_api(user_id: int):
+    boosters = await get_active_boosters(user_id)
+    return {"boosters": boosters}
+
+@app.post("/api/buy_skin")
+async def buy_skin_api(user_id: int, skin_id: int):
+    success, name, emoji = await buy_skin(user_id, skin_id)
+    if success:
+        return {"success": True, "skin_name": name, "skin_emoji": emoji}
+    return {"success": False, "need": 0}
+
+@app.post("/api/equip_skin")
+async def equip_skin_api(user_id: int, skin_id: int):
+    success, emoji = await equip_skin(user_id, skin_id)
+    if success:
+        return {"success": True, "skin": emoji}
+    return {"success": False, "message": "Скин не куплен"}
+
+@app.get("/api/get_skins")
+async def get_skins_api(user_id: int):
+    skins = await get_skins(user_id)
+    return {"skins": skins}
+
+@app.get("/api/get_referrals")
+async def get_referrals_api(user_id: int):
+    count = await get_referrals(user_id)
+    return {"count": count}
+
+@app.post("/api/claim_referral")
+async def claim_referral_api(user_id: int):
+    reward = await claim_referral_reward(user_id)
+    if reward > 0:
+        return {"success": True, "reward": reward}
+    return {"success": False, "message": "Нет новых рефералов"}
+
+@app.get("/api/get_leaderboard")
+async def get_leaderboard_api(limit: int = 10):
+    leaderboard = await get_leaderboard(limit)
+    return {"leaderboard": leaderboard}
+
+@app.get("/api/get_stats")
+async def get_stats_api(user_id: int):
+    stats = await get_user_stats(user_id)
+    boosters = await get_active_boosters(user_id)
+    multiplier = await get_booster_multiplier(user_id)
+    return {**stats, "boosters": boosters, "tap_multiplier": multiplier}
+
+@app.get("/api/share_image")
+async def share_image(user_id: int):
+    stats = await get_user_stats(user_id)
+    
+    img = Image.new('RGB', (500, 500), color='#0a0f1e')
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+    except:
+        font = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    
+    # Рисуем утку (эмодзи не отрисовать, пишем текст)
+    draw.text((250, 100), "🦆", fill="white", anchor="mm", font=font)
+    
+    draw.text((250, 200), f"Баланс: {stats['balance']} монет", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 250), f"Сила тапа: +{stats['profit_per_tap']}", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 300), f"Скин: {stats['current_skin']}", fill="#ffd700", anchor="mm", font=font_small)
+    draw.text((250, 400), "Zeta Clicker", fill="white", anchor="mm", font=font)
+    
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    
+    return Response(content=img_byte_arr.getvalue(), media_type="image/png")
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = await get_user_stats(user_id)
@@ -462,6 +613,7 @@ async def mini_app(user_id: int = 1):
         .copy-btn {{ background: #4caf50; border: none; border-radius: 12px; padding: 12px; color: white; cursor: pointer; width: 100%; margin-top: 10px; }}
         .channel-btn {{ background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.3); border-radius: 24px; padding: 12px; text-align: center; cursor: pointer; margin-top: 20px; }}
         .channel-text {{ color: #ffd700; font-size: 14px; font-weight: 600; }}
+        .share-btn {{ background: linear-gradient(135deg, #ff8c00, #ff4500); }}
         .screen {{ display: none; }}
         .screen.active {{ display: block; }}
     </style>
@@ -506,6 +658,7 @@ async def mini_app(user_id: int = 1):
             <div class="channel-btn" id="channelBtn">
                 <span class="channel-text">📢 Канал ZetaClicker</span>
             </div>
+            <button class="copy-btn share-btn" id="shareBtn" style="margin-top: 16px;">📤 Поделиться прогрессом</button>
         </div>
         
         <!-- КЕЙСЫ -->
@@ -717,6 +870,23 @@ async def mini_app(user_id: int = 1):
             tg.openTelegramLink('https://t.me/ZetaClicker');
         }};
         
+        // Кнопка поделиться
+        document.getElementById('shareBtn').onclick = async function() {{
+            var imgUrl = '/api/share_image?user_id=' + userId;
+            tg.showPopup({{
+                title: '📤 Поделиться прогрессом',
+                message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
+                buttons: [
+                    {{type: 'default', text: '📤 Поделиться'}},
+                    {{type: 'cancel', text: 'Отмена'}}
+                ]
+            }}, function(buttonId) {{
+                if (buttonId === '0') {{
+                    tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
+                }}
+            }});
+        }};
+        
         async function loadCases() {{
             var res = await fetch('/api/get_cases');
             var data = await res.json();
@@ -884,9 +1054,7 @@ async def mini_app(user_id: int = 1):
 """
     
     return HTMLResponse(content=html)
-    
-    
-    
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
