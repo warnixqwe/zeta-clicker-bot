@@ -6,11 +6,6 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
-from database import (
-    init_db, get_user_stats, update_clicks, add_referral, check_referral_bonus,
-    get_referrals, claim_referral_reward, upgrade_tap_power, upgrade_hourly,
-    get_skins, buy_skin, equip_skin, open_case, get_cases, get_boosters, buy_booster, get_leaderboard
-)
 
 app = FastAPI()
 
