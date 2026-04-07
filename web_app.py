@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
-from PIL import Image, ImageDraw, ImageFont
 
 app = FastAPI()
 
@@ -16,22 +15,23 @@ class ClickData(BaseModel):
     user_id: int
     clicks: int
 
+# ==================== ФУНКЦИИ БД ====================
+
+async def get_connection():
+    return await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+
 async def init_db():
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    
-    # Удаляем таблицы в правильном порядке (сначала зависимые)
+    conn = await get_connection()
     await conn.execute("DROP TABLE IF EXISTS user_boosters")
     await conn.execute("DROP TABLE IF EXISTS user_skins")
     await conn.execute("DROP TABLE IF EXISTS case_rewards")
     await conn.execute("DROP TABLE IF EXISTS referrals")
-    await conn.execute("DROP TABLE IF EXISTS user_achievements")
     await conn.execute("DROP TABLE IF EXISTS achievements")
     await conn.execute("DROP TABLE IF EXISTS skins")
     await conn.execute("DROP TABLE IF EXISTS boosters")
     await conn.execute("DROP TABLE IF EXISTS cases")
     await conn.execute("DROP TABLE IF EXISTS users")
     
-    # Создаём таблицу users
     await conn.execute("""
         CREATE TABLE users (
             user_id BIGINT PRIMARY KEY,
@@ -48,17 +48,17 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу referrals
     await conn.execute("""
         CREATE TABLE referrals (
             referrer_id BIGINT,
             referred_id BIGINT PRIMARY KEY,
             reward_claimed INTEGER DEFAULT 0,
+            bonus_claimed INTEGER DEFAULT 0,
+            referred_tap_power INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     
-    # Создаём таблицу skins
     await conn.execute("""
         CREATE TABLE skins (
             id SERIAL PRIMARY KEY,
@@ -70,7 +70,6 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу user_skins
     await conn.execute("""
         CREATE TABLE user_skins (
             user_id BIGINT,
@@ -79,7 +78,6 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу cases
     await conn.execute("""
         CREATE TABLE cases (
             id SERIAL PRIMARY KEY,
@@ -90,7 +88,6 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу case_rewards (с ON DELETE CASCADE)
     await conn.execute("""
         CREATE TABLE case_rewards (
             id SERIAL PRIMARY KEY,
@@ -102,7 +99,6 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу boosters
     await conn.execute("""
         CREATE TABLE boosters (
             id SERIAL PRIMARY KEY,
@@ -117,7 +113,6 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу user_boosters
     await conn.execute("""
         CREATE TABLE user_boosters (
             user_id BIGINT,
@@ -127,44 +122,19 @@ async def init_db():
         )
     """)
     
-    # Создаём таблицу achievements
-    await conn.execute("""
-        CREATE TABLE achievements (
-            id SERIAL PRIMARY KEY,
-            name TEXT,
-            description TEXT,
-            condition_type TEXT,
-            condition_value INTEGER,
-            reward_gems INTEGER,
-            reward_clicks INTEGER
-        )
-    """)
-    
-    # Создаём таблицу user_achievements
-    await conn.execute("""
-        CREATE TABLE user_achievements (
-            user_id BIGINT,
-            achievement_id INTEGER,
-            progress INTEGER DEFAULT 0,
-            completed INTEGER DEFAULT 0,
-            completed_at TIMESTAMP DEFAULT NULL,
-            PRIMARY KEY (user_id, achievement_id)
-        )
-    """)
-    
-    # ==================== ДОБАВЛЯЕМ ДАННЫЕ ====================
-    
     # Добавляем скины
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Обычная утка', '🦆', 0, 0, 0)
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Золотая утка', '🌟', 5000, 0, 2)
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Киберутка', '🤖', 15000, 0, 5)
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Утка-призрак', '👻', 30000, 0, 10)
-    await conn.execute("INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)", 'Дьявольская утка', '😈', 50000, 0, 15)
+    await conn.executemany("""
+        INSERT INTO skins (name, emoji, price_clicks, price_gems, tap_bonus) VALUES ($1, $2, $3, $4, $5)
+    """, [
+        ('Обычная утка', '🦆', 0, 0, 0),
+        ('Золотая утка', '🌟', 5000, 0, 2),
+        ('Киберутка', '🤖', 15000, 0, 5),
+        ('Утка-призрак', '👻', 30000, 0, 10),
+        ('Дьявольская утка', '😈', 50000, 0, 15),
+    ])
     
-    # Добавляем кейсы
+    # Кейсы
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Обычный кейс', '📦', 1000, 0)
-    
-    # Добавляем награды для обычного кейса
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 100, '100 монет', 30)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 500, '500 монет', 20)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'clicks', 1000, '1000 монет', 15)")
@@ -173,10 +143,7 @@ async def init_db():
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'booster', 1, 'x2 прибыль (30 мин)', 5)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (1, 'skin', 2, 'Золотая утка 🌟', 2)")
     
-    # Золотой кейс
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Золотой кейс', '🎁', 10000, 10)
-    
-    # Добавляем награды для золотого кейса
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'clicks', 5000, '5000 монет', 25)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'clicks', 10000, '10000 монет', 20)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'gems', 5, '5 алмазов 💎', 15)")
@@ -185,10 +152,7 @@ async def init_db():
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'booster', 1, 'x2 прибыль (30 мин)', 5)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (2, 'skin', 3, 'Киберутка 🤖', 3)")
     
-    # Алмазный кейс
     await conn.execute("INSERT INTO cases (name, emoji, price_clicks, price_gems) VALUES ($1, $2, $3, $4)", 'Алмазный кейс', '💎', 50000, 50)
-    
-    # Добавляем награды для алмазного кейса
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'clicks', 25000, '25000 монет', 20)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'clicks', 50000, '50000 монет', 15)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'gems', 10, '10 алмазов 💎', 20)")
@@ -197,16 +161,14 @@ async def init_db():
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'skin', 4, 'Утка-призрак 👻', 5)")
     await conn.execute("INSERT INTO case_rewards (case_id, reward_type, reward_value, reward_text, chance) VALUES (3, 'skin', 5, 'Дьявольская утка 😈', 3)")
     
-    # Добавляем бустеры
-    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 
-                       'x2 Прибыль', '⚡', 'Удваивает прибыль за тап на 30 минут', 'tap_multiplier', 2, 30, 5000, 0)
-    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 
-                       'Энергетик', '🔋', 'Восстанавливает 500 энергии', 'energy', 500, 0, 2000, 0)
+    # Бустеры
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 'x2 Прибыль', '⚡', 'Удваивает прибыль за тап на 30 минут', 'tap_multiplier', 2, 30, 5000, 0)
+    await conn.execute("INSERT INTO boosters (name, emoji, description, effect_type, effect_value, duration_minutes, price_clicks, price_gems) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", 'Энергетик', '🔋', 'Восстанавливает 500 энергии', 'energy', 500, 0, 2000, 0)
     
     await conn.close()
 
 async def get_user_stats(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
     if not row:
         await conn.execute("""
@@ -231,13 +193,19 @@ async def get_user_stats(user_id: int):
         "current_skin": row["current_skin"] if row["current_skin"] else "🦆"
     }
 
-async def update_balance(user_id: int, increment: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    await conn.execute("UPDATE users SET balance = balance + $1, total_clicks = total_clicks + $1, energy = energy - 1 WHERE user_id = $2", increment, user_id)
+async def update_clicks(user_id: int, increment: int):
+    conn = await get_connection()
+    await conn.execute("""
+        UPDATE users 
+        SET balance = balance + $1, 
+            total_clicks = total_clicks + $1, 
+            energy = energy - 1 
+        WHERE user_id = $2
+    """, increment, user_id)
     await conn.close()
 
 async def get_active_boosters(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     now = datetime.now()
     rows = await conn.fetch("""
         SELECT b.id, b.name, b.emoji, b.description, b.effect_type, b.effect_value, 
@@ -257,82 +225,65 @@ async def get_booster_multiplier(user_id: int):
             multiplier *= b["effect_value"]
     return multiplier
 
-async def get_user_username(user_id: int):
-    try:
-        from aiogram import Bot
-        bot = Bot(token=os.getenv("BOT_TOKEN"))
-        user = await bot.get_chat(user_id)
-        await bot.session.close()
-        return user.username or str(user_id)
-    except:
-        return str(user_id)
-
-@app.post("/api/click")
-async def handle_click(data: ClickData):
-    multiplier = await get_booster_multiplier(data.user_id)
-    final_clicks = int(data.clicks * multiplier)
-    await update_balance(data.user_id, final_clicks)
-    stats = await get_user_stats(data.user_id)
-    return stats
-
-@app.post("/api/upgrade_tap")
-async def upgrade_tap(user_id: int):
+async def upgrade_tap_power(user_id: int):
     stats = await get_user_stats(user_id)
     price = stats["profit_per_tap"] * 100
     if stats["balance"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+        conn = await get_connection()
         new_balance = stats["balance"] - price
         new_profit = stats["profit_per_tap"] + 1
         await conn.execute("UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3", new_balance, new_profit, user_id)
         await conn.close()
-        return {"success": True, "new_tap_power": new_profit}
-    return {"success": False, "need": price}
+        return (True, new_profit, price)
+    return (False, stats["profit_per_tap"], price)
 
-@app.post("/api/upgrade_hourly")
 async def upgrade_hourly(user_id: int):
     stats = await get_user_stats(user_id)
     price = 500 + stats["profit_per_hour"] * 100
     if stats["balance"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+        conn = await get_connection()
         new_balance = stats["balance"] - price
         new_hourly = stats["profit_per_hour"] + 5
         await conn.execute("UPDATE users SET balance = $1, profit_per_hour = $2 WHERE user_id = $3", new_balance, new_hourly, user_id)
         await conn.close()
-        return {"success": True, "new_hourly": new_hourly}
-    return {"success": False, "need": price}
+        return (True, new_hourly, price)
+    return (False, stats["profit_per_hour"], price)
 
-@app.post("/api/claim_daily")
 async def claim_daily(user_id: int):
     stats = await get_user_stats(user_id)
     today = datetime.now().date()
-    if stats.get("last_daily"):
-        last_date = stats["last_daily"].date() if isinstance(stats["last_daily"], datetime) else stats["last_daily"]
+    last_date = stats.get("last_daily")
+    if last_date:
+        if isinstance(last_date, datetime):
+            last_date = last_date.date()
         if last_date == today:
-            return {"success": False, "message": "Уже забирал сегодня"}
-        if last_date == today - timedelta(days=1):
-            streak = stats["daily_streak"] + 1
-        else:
-            streak = 1
+            return (False, 0, 0)
+        streak = stats["daily_streak"] + 1 if last_date == today - timedelta(days=1) else 1
     else:
         streak = 1
-    
     bonus = min(100 + streak * 50, 600)
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     await conn.execute("UPDATE users SET balance = balance + $1, daily_streak = $2, last_daily = $3 WHERE user_id = $4", bonus, streak, today, user_id)
     await conn.close()
-    return {"success": True, "bonus": bonus, "streak": streak}
+    return (True, bonus, streak)
 
-@app.post("/api/open_case")
-async def open_case(user_id: int, case_id: int = 1):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    
+async def collect_passive(user_id: int):
+    stats = await get_user_stats(user_id)
+    if stats["profit_per_hour"] <= 0:
+        return (False, 0)
+    earned = stats["profit_per_hour"]
+    conn = await get_connection()
+    await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", earned, user_id)
+    await conn.close()
+    return (True, earned)
+
+async def open_case(user_id: int, case_id: int):
+    conn = await get_connection()
     case = await conn.fetchrow("SELECT name, emoji, price_clicks, price_gems FROM cases WHERE id = $1", case_id)
     if not case:
         await conn.close()
-        return {"success": False, "message": "Кейс не найден"}
-    
+        return (False, None, None, None)
     stats = await get_user_stats(user_id)
-    
     if case["price_clicks"] > 0 and stats["balance"] >= case["price_clicks"]:
         new_balance = stats["balance"] - case["price_clicks"]
         await conn.execute("UPDATE users SET balance = $1 WHERE user_id = $2", new_balance, user_id)
@@ -341,12 +292,9 @@ async def open_case(user_id: int, case_id: int = 1):
         await conn.execute("UPDATE users SET gems = $1 WHERE user_id = $2", new_gems, user_id)
     else:
         await conn.close()
-        return {"success": False, "need": case["price_clicks"] if case["price_clicks"] > 0 else case["price_gems"], 
-                "currency": "монет" if case["price_clicks"] > 0 else "алмазов"}
-    
+        return (False, None, None, None)
     rewards = await conn.fetch("SELECT reward_type, reward_value, reward_text FROM case_rewards WHERE case_id = $1", case_id)
     selected = random.choice(rewards)
-    
     if selected["reward_type"] == "clicks":
         await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", selected["reward_value"], user_id)
     elif selected["reward_type"] == "gems":
@@ -355,73 +303,40 @@ async def open_case(user_id: int, case_id: int = 1):
         expires_at = datetime.now() + timedelta(minutes=30)
         await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (user_id, booster_id) DO UPDATE SET expires_at = EXCLUDED.expires_at", user_id, 1, expires_at)
     elif selected["reward_type"] == "skin":
-        skin_id = selected["reward_value"]
-        await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, skin_id)
-    
+        await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected["reward_value"])
     await conn.close()
-    return {"success": True, "reward_text": selected["reward_text"], "case_emoji": case["emoji"]}
+    return (True, selected["reward_text"], case["emoji"], None)
 
-@app.post("/api/buy_booster")
-async def buy_booster(user_id: int, booster_id: int):
+async def get_cases():
+    conn = await get_connection()
+    cases = await conn.fetch("SELECT id, name, emoji, price_clicks, price_gems FROM cases")
+    await conn.close()
+    return [{"id": c["id"], "name": c["name"], "emoji": c["emoji"], "price_clicks": c["price_clicks"], "price_gems": c["price_gems"]} for c in cases]
+
+async def buy_booster(user_id: int):
     stats = await get_user_stats(user_id)
     price = 5000
     if stats["balance"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+        conn = await get_connection()
         new_balance = stats["balance"] - price
         await conn.execute("UPDATE users SET balance = $1 WHERE user_id = $2", new_balance, user_id)
         expires_at = datetime.now() + timedelta(minutes=30)
-        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (user_id, booster_id) DO UPDATE SET expires_at = EXCLUDED.expires_at", user_id, booster_id, expires_at)
+        await conn.execute("INSERT INTO user_boosters (user_id, booster_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (user_id, booster_id) DO UPDATE SET expires_at = EXCLUDED.expires_at", user_id, 1, expires_at)
         await conn.close()
-        return {"success": True, "booster_name": "x2 Прибыль", "booster_emoji": "⚡"}
-    return {"success": False, "need": price}
+        return (True, "x2 Прибыль", "⚡")
+    return (False, None, None)
 
-@app.post("/api/add_referral")
-async def add_referral(user_id: int, referrer_id: int):
-    if user_id == referrer_id:
-        return {"success": False}
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    try:
-        await conn.execute("INSERT INTO referrals (referrer_id, referred_id) VALUES ($1, $2)", referrer_id, user_id)
-        await conn.execute("UPDATE users SET balance = balance + 1000 WHERE user_id = $1", referrer_id)
-        await conn.close()
-        return {"success": True}
-    except:
-        await conn.close()
-        return {"success": False}
-
-@app.get("/api/get_referrals")
-async def get_referrals(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    count = await conn.fetchval("SELECT COUNT(*) FROM referrals WHERE referrer_id = $1", user_id)
-    await conn.close()
-    return {"count": count}
-
-@app.post("/api/claim_referral")
-async def claim_referral(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-    count = await conn.fetchval("SELECT COUNT(*) FROM referrals WHERE referrer_id = $1 AND reward_claimed = 0", user_id)
-    if count == 0:
-        await conn.close()
-        return {"success": False, "message": "Нет новых рефералов"}
-    reward = count * 1000
-    await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", reward, user_id)
-    await conn.execute("UPDATE referrals SET reward_claimed = 1 WHERE referrer_id = $1 AND reward_claimed = 0", user_id)
-    await conn.close()
-    return {"success": True, "reward": reward}
-
-@app.get("/api/get_skins")
 async def get_skins(user_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     rows = await conn.fetch("SELECT skin_id FROM user_skins WHERE user_id = $1", user_id)
     owned = [row["skin_id"] for row in rows]
     skins_rows = await conn.fetch("SELECT id, name, emoji, price_clicks, tap_bonus FROM skins")
     await conn.close()
-    return {"skins": [{"id": r["id"], "name": r["name"], "emoji": r["emoji"], "price": r["price_clicks"], "bonus": r["tap_bonus"], "owned": r["id"] in owned} for r in skins_rows]}
+    return [{"id": r["id"], "name": r["name"], "emoji": r["emoji"], "price": r["price_clicks"], "bonus": r["tap_bonus"], "owned": r["id"] in owned} for r in skins_rows]
 
-@app.post("/api/buy_skin")
 async def buy_skin(user_id: int, skin_id: int):
     stats = await get_user_stats(user_id)
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     price = await conn.fetchval("SELECT price_clicks FROM skins WHERE id = $1", skin_id)
     if stats["balance"] >= price:
         new_balance = stats["balance"] - price
@@ -429,39 +344,47 @@ async def buy_skin(user_id: int, skin_id: int):
         await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, skin_id)
         skin = await conn.fetchrow("SELECT name, emoji FROM skins WHERE id = $1", skin_id)
         await conn.close()
-        return {"success": True, "skin_name": skin["name"], "skin_emoji": skin["emoji"]}
+        return (True, skin["name"], skin["emoji"])
     await conn.close()
-    return {"success": False, "need": price}
+    return (False, None, None)
 
-@app.post("/api/equip_skin")
 async def equip_skin(user_id: int, skin_id: int):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     owned = await conn.fetchval("SELECT 1 FROM user_skins WHERE user_id = $1 AND skin_id = $2", user_id, skin_id)
     if not owned:
         await conn.close()
-        return {"success": False, "message": "Скин не куплен"}
+        return (False, None)
     emoji = await conn.fetchval("SELECT emoji FROM skins WHERE id = $1", skin_id)
     await conn.execute("UPDATE users SET current_skin = $1 WHERE user_id = $2", emoji, user_id)
     await conn.close()
-    return {"success": True, "skin": emoji}
+    return (True, emoji)
 
-@app.get("/api/get_boosters")
-async def get_boosters(user_id: int):
-    boosters = await get_active_boosters(user_id)
-    return {"boosters": boosters}
+async def get_referrals(user_id: int) -> int:
+    conn = await get_connection()
+    count = await conn.fetchval("SELECT COUNT(*) FROM referrals WHERE referrer_id = $1", user_id)
+    await conn.close()
+    return count
 
-@app.get("/api/get_leaderboard")
+async def claim_referral_reward(user_id: int) -> int:
+    conn = await get_connection()
+    count = await conn.fetchval("SELECT COUNT(*) FROM referrals WHERE referrer_id = $1 AND reward_claimed = 0", user_id)
+    if count == 0:
+        await conn.close()
+        return 0
+    reward = count * 1000
+    await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", reward, user_id)
+    await conn.execute("UPDATE referrals SET reward_claimed = 1 WHERE referrer_id = $1 AND reward_claimed = 0", user_id)
+    await conn.close()
+    return reward
+
 async def get_leaderboard(limit: int = 10):
-    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    conn = await get_connection()
     rows = await conn.fetch("SELECT user_id, balance, total_clicks FROM users ORDER BY balance DESC LIMIT $1", limit)
     await conn.close()
-    
     leaderboard = []
     for row in rows:
         user_id = row["user_id"]
         username = str(user_id)
-        
-        # Пробуем получить username через Telegram API
         try:
             from aiogram import Bot
             bot = Bot(token=os.getenv("BOT_TOKEN"))
@@ -471,96 +394,14 @@ async def get_leaderboard(limit: int = 10):
                 username = f"@{user.username}"
             elif user.first_name:
                 username = user.first_name
-            else:
-                username = str(user_id)
         except:
             pass
-        
-        leaderboard.append({
-            "user_id": user_id,
-            "username": username,
-            "balance": row["balance"],
-            "clicks": row["total_clicks"]
-        })
-    
-    return {"leaderboard": leaderboard}
-
-@app.get("/api/get_stats")
-async def get_stats(user_id: int):
-    stats = await get_user_stats(user_id)
-    boosters = await get_active_boosters(user_id)
-    multiplier = await get_booster_multiplier(user_id)
-    return {**stats, "boosters": boosters, "tap_multiplier": multiplier}
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-@app.on_event("startup")
-async def startup():
-    await init_db()
+        leaderboard.append({"user_id": user_id, "username": username, "balance": row["balance"], "clicks": row["total_clicks"]})
+    return leaderboard
 
 @app.get("/", response_class=HTMLResponse)
 async def mini_app(user_id: int = 1):
     stats = await get_user_stats(user_id)
-
-    from PIL import Image, ImageDraw, ImageFont
-import io
-from fastapi.responses import Response
-import aiohttp
-
-@app.get("/api/share_image")
-async def share_image(user_id: int):
-    stats = await get_user_stats(user_id)
-    
-    # Создаём изображение 500x500
-    img = Image.new('RGB', (500, 500), color='#0a0f1e')
-    draw = ImageDraw.Draw(img)
-    
-    # Загружаем шрифт (можно использовать стандартный)
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-    except:
-        font = ImageFont.load_default()
-        font_small = ImageFont.load_default()
-    
-    # Рисуем утку (эмодзи не отрисовать, пишем текст)
-    draw.text((250, 100), "🦆", fill="white", anchor="mm", font=font)
-    
-    # Текст
-    draw.text((250, 200), f"Баланс: {stats['balance']} монет", fill="#ffd700", anchor="mm", font=font_small)
-    draw.text((250, 250), f"Уровень: {stats['level']}", fill="#ffd700", anchor="mm", font=font_small)
-    draw.text((250, 300), f"Скин: {stats['current_skin']}", fill="#ffd700", anchor="mm", font=font_small)
-    draw.text((250, 400), "Zeta Clicker", fill="white", anchor="mm", font=font)
-    
-    # Сохраняем в байты
-    img_byte_arr = io.BytesIO()
-    img.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
-    
-    return Response(content=img_byte_arr.getvalue(), media_type="image/png")
-
-@app.post("/api/upgrade_tap")
-async def upgrade_tap(user_id: int):
-    stats = await get_user_stats(user_id)
-    price = stats["profit_per_tap"] * 100
-    if stats["balance"] >= price:
-        conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
-        new_balance = stats["balance"] - price
-        new_profit = stats["profit_per_tap"] + 1
-        await conn.execute(
-            "UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3",
-            new_balance, new_profit, user_id
-        )
-        await conn.close()
-        
-        # Проверяем, не пора ли дать бонус пригласившему
-        await check_referral_bonus(user_id, new_profit)
-        
-        return {"success": True, "new_tap_power": new_profit}
-    
-    return {"success": False, "need": price}
     
     html = f"""
 <!DOCTYPE html>
@@ -571,357 +412,58 @@ async def upgrade_tap(user_id: int):
     <title>Zeta Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }}
-        
-        body {{
-            min-height: 100vh;
-            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            padding-bottom: 80px;
-        }}
-        
-        .container {{
-            max-width: 450px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        
-        .card {{
-            background: rgba(20, 30, 45, 0.7);
-            backdrop-filter: blur(12px);
-            border-radius: 32px;
-            padding: 20px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(255, 215, 0, 0.2);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }}
-        
-        .title {{
-            font-size: 28px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #ffd700, #ff8c00);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-align: center;
-            margin-bottom: 20px;
-        }}
-        
-        .balance-row {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 20px;
-        }}
-        
-        .balance-label {{
-            color: rgba(255,255,255,0.6);
-            font-size: 14px;
-        }}
-        
-        .balance-value {{
-            font-size: 32px;
-            font-weight: bold;
-            color: #ffd700;
-        }}
-        
-        .stats-grid {{
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-bottom: 20px;
-        }}
-        
-        .stat-item {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-        
-        .stat-label {{
-            color: rgba(255,255,255,0.5);
-            font-size: 14px;
-        }}
-        
-        .stat-value {{
-            color: white;
-            font-size: 18px;
-            font-weight: 600;
-        }}
-        
-        .highlight {{
-            color: #ffd700;
-        }}
-        
-        .energy-container {{
-            margin-top: 12px;
-        }}
-        
-        .energy-bar {{
-            width: 100%;
-            height: 8px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 8px;
-        }}
-        
-        .energy-fill {{
-            height: 100%;
-            background: linear-gradient(90deg, #00ff88, #00cc66);
-            border-radius: 4px;
-            transition: width 0.2s;
-            width: {stats["energy"]/stats["max_energy"]*100}%;
-        }}
-        
-        .tap-area {{
-            text-align: center;
-            margin: 30px 0;
-        }}
-        
-        .duck {{
-            font-size: 180px;
-            cursor: pointer;
-            transition: transform 0.1s ease;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
-        }}
-        
-        .duck:active {{
-            transform: scale(0.95);
-        }}
-        
-        .tap-value {{
-            position: fixed;
-            pointer-events: none;
-            font-size: 28px;
-            font-weight: bold;
-            color: #ffd700;
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
-            z-index: 1000;
-            animation: floatUp 0.6s ease-out forwards;
-        }}
-        
-        @keyframes floatUp {{
-            0% {{
-                opacity: 1;
-                transform: translateY(0) scale(0.8);
-            }}
-            100% {{
-                opacity: 0;
-                transform: translateY(-80px) scale(1.2);
-            }}
-        }}
-        
-        .bottom-menu {{
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(20, 30, 45, 0.95);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(255,215,0,0.2);
-            padding: 12px 20px;
-            display: flex;
-            justify-content: space-around;
-            z-index: 100;
-            overflow-x: auto;
-        }}
-        
-        .bottom-menu > div {{
-            display: flex;
-            justify-content: space-around;
-            min-width: 100%;
-        }}
-        
-        .menu-item {{
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            background: none;
-            border: none;
-            color: rgba(255,255,255,0.6);
-            font-size: 11px;
-            cursor: pointer;
-            padding: 6px 8px;
-            border-radius: 16px;
-            white-space: nowrap;
-        }}
-        
-        .menu-item.active {{
-            color: #ffd700;
-            background: rgba(255,215,0,0.15);
-        }}
-        
-        .menu-icon {{
-            font-size: 24px;
-        }}
-        
-        .skins-list, .cases-list, .boosters-list, .leaderboard-list {{
-            margin: 20px 0;
-        }}
-        
-        .skin-item, .booster-item, .leaderboard-item {{
-            background: rgba(0,0,0,0.3);
-            border-radius: 16px;
-            padding: 12px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-        
-        .skin-info, .booster-info {{
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }}
-        
-        .skin-emoji, .booster-emoji {{
-            font-size: 40px;
-        }}
-        
-        .skin-name, .booster-name {{
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-        }}
-        
-        .skin-price, .booster-price {{
-            font-size: 12px;
-            color: #ffd700;
-        }}
-        
-        .skin-btn, .booster-btn {{
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border: none;
-            border-radius: 12px;
-            padding: 8px 16px;
-            color: white;
-            cursor: pointer;
-        }}
-        
-        .skin-btn.owned {{
-            background: #4caf50;
-        }}
-        
-        .case-item {{
-            background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,140,0,0.2));
-            border-radius: 20px;
-            padding: 30px;
-            text-align: center;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }}
-        
-        .case-emoji {{
-            font-size: 80px;
-        }}
-        
-        .case-name {{
-            font-size: 20px;
-            font-weight: bold;
-            color: #ffd700;
-            margin-top: 10px;
-        }}
-        
-        .case-price {{
-            font-size: 14px;
-            color: rgba(255,255,255,0.7);
-            margin-top: 5px;
-        }}
-        
-        .leaderboard-item {{
-            display: flex;
-            justify-content: space-between;
-            padding: 12px;
-        }}
-        
-        .leaderboard-rank {{
-            font-weight: bold;
-            color: #ffd700;
-            width: 40px;
-        }}
-        
-        .leaderboard-name {{
-            flex: 1;
-        }}
-        
-        .leaderboard-clicks {{
-            color: #ffd700;
-        }}
-        
-        .referral-link {{
-            background: rgba(0,0,0,0.3);
-            border-radius: 16px;
-            padding: 12px;
-            margin-bottom: 20px;
-            word-break: break-all;
-        }}
-        
-        .referral-link-text {{
-            color: #ffd700;
-            font-size: 12px;
-            font-family: monospace;
-        }}
-        
-        .referral-stats {{
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }}
-        
-        .referral-stat {{
-            text-align: center;
-            flex: 1;
-        }}
-        
-        .referral-stat-value {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #ffd700;
-        }}
-        
-        .copy-btn {{
-            background: #4caf50;
-            border: none;
-            border-radius: 12px;
-            padding: 12px;
-            color: white;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
-        }}
-        
-        .channel-btn {{
-            background: rgba(255,215,0,0.15);
-            border: 1px solid rgba(255,215,0,0.3);
-            border-radius: 24px;
-            padding: 12px;
-            text-align: center;
-            cursor: pointer;
-            margin-top: 20px;
-        }}
-        
-        .channel-text {{
-            color: #ffd700;
-            font-size: 14px;
-            font-weight: 600;
-        }}
-        
-        .screen {{
-            display: none;
-        }}
-        
-        .screen.active {{
-            display: block;
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }}
+        body {{ min-height: 100vh; background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c); font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding-bottom: 80px; }}
+        .container {{ max-width: 450px; margin: 0 auto; padding: 20px; }}
+        .card {{ background: rgba(20, 30, 45, 0.7); backdrop-filter: blur(12px); border-radius: 32px; padding: 20px; margin-bottom: 16px; border: 1px solid rgba(255, 215, 0, 0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }}
+        .title {{ font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #ffd700, #ff8c00); -webkit-background-clip: text; background-clip: text; color: transparent; text-align: center; margin-bottom: 20px; }}
+        .balance-row {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }}
+        .balance-label {{ color: rgba(255,255,255,0.6); font-size: 14px; }}
+        .balance-value {{ font-size: 32px; font-weight: bold; color: #ffd700; }}
+        .stats-grid {{ display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }}
+        .stat-item {{ display: flex; justify-content: space-between; align-items: center; }}
+        .stat-label {{ color: rgba(255,255,255,0.5); font-size: 14px; }}
+        .stat-value {{ color: white; font-size: 18px; font-weight: 600; }}
+        .highlight {{ color: #ffd700; }}
+        .energy-container {{ margin-top: 12px; }}
+        .energy-bar {{ width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; margin-top: 8px; }}
+        .energy-fill {{ height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 4px; transition: width 0.2s; width: {stats["energy"]/stats["max_energy"]*100}%; }}
+        .tap-area {{ text-align: center; margin: 30px 0; }}
+        .duck {{ font-size: 180px; cursor: pointer; transition: transform 0.1s ease; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }}
+        .duck:active {{ transform: scale(0.95); }}
+        .tap-value {{ position: fixed; pointer-events: none; font-size: 28px; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 1000; animation: floatUp 0.6s ease-out forwards; }}
+        @keyframes floatUp {{ 0% {{ opacity: 1; transform: translateY(0) scale(0.8); }} 100% {{ opacity: 0; transform: translateY(-80px) scale(1.2); }} }}
+        .bottom-menu {{ position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20, 30, 45, 0.95); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,215,0,0.2); padding: 8px 10px; z-index: 100; overflow-x: auto; white-space: nowrap; }}
+        .bottom-menu > div {{ display: flex; justify-content: space-around; min-width: 100%; }}
+        .menu-item {{ display: inline-flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.6); font-size: 11px; cursor: pointer; padding: 6px 8px; border-radius: 16px; white-space: nowrap; }}
+        .menu-item.active {{ color: #ffd700; background: rgba(255,215,0,0.15); }}
+        .menu-icon {{ font-size: 24px; }}
+        .skins-list, .cases-list, .boosters-list, .leaderboard-list {{ margin: 20px 0; }}
+        .skin-item, .booster-item, .leaderboard-item {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .skin-info, .booster-info {{ display: flex; align-items: center; gap: 12px; }}
+        .skin-emoji, .booster-emoji {{ font-size: 40px; }}
+        .skin-name, .booster-name {{ font-size: 16px; font-weight: bold; color: white; }}
+        .skin-price, .booster-price {{ font-size: 12px; color: #ffd700; }}
+        .skin-btn, .booster-btn {{ background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 12px; padding: 8px 16px; color: white; cursor: pointer; }}
+        .skin-btn.owned {{ background: #4caf50; }}
+        .case-item {{ background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,140,0,0.2)); border-radius: 20px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 20px; }}
+        .case-emoji {{ font-size: 80px; }}
+        .case-name {{ font-size: 20px; font-weight: bold; color: #ffd700; margin-top: 10px; }}
+        .case-price {{ font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 5px; }}
+        .leaderboard-item {{ display: flex; justify-content: space-between; padding: 12px; }}
+        .leaderboard-rank {{ font-weight: bold; color: #ffd700; width: 40px; }}
+        .leaderboard-name {{ flex: 1; }}
+        .leaderboard-clicks {{ color: #ffd700; }}
+        .referral-link {{ background: rgba(0,0,0,0.3); border-radius: 16px; padding: 12px; margin-bottom: 20px; word-break: break-all; }}
+        .referral-link-text {{ color: #ffd700; font-size: 12px; font-family: monospace; }}
+        .referral-stats {{ display: flex; justify-content: space-between; margin-bottom: 20px; }}
+        .referral-stat {{ text-align: center; flex: 1; }}
+        .referral-stat-value {{ font-size: 24px; font-weight: bold; color: #ffd700; }}
+        .copy-btn {{ background: #4caf50; border: none; border-radius: 12px; padding: 12px; color: white; cursor: pointer; width: 100%; margin-top: 10px; }}
+        .channel-btn {{ background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.3); border-radius: 24px; padding: 12px; text-align: center; cursor: pointer; margin-top: 20px; }}
+        .channel-text {{ color: #ffd700; font-size: 14px; font-weight: 600; }}
+        .screen {{ display: none; }}
+        .screen.active {{ display: block; }}
     </style>
 </head>
 <body>
@@ -931,7 +473,6 @@ async def upgrade_tap(user_id: int):
             <div class="card">
                 <div class="title">Zeta Clicker</div>
                 <div class="balance-row">
-                <button class="btn" id="shareBtn">📤 Поделиться</button>
                     <span class="balance-label">💰 Баланс</span>
                     <span class="balance-value" id="balance">{stats["balance"]}</span>
                 </div>
@@ -1045,7 +586,7 @@ async def upgrade_tap(user_id: int):
         </div>
     </div>
     
-        <script>
+    <script>
         var tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
@@ -1177,21 +718,17 @@ async def upgrade_tap(user_id: int):
         }};
         
         async function loadCases() {{
+            var res = await fetch('/api/get_cases');
+            var data = await res.json();
             var casesList = document.getElementById('casesList');
             casesList.innerHTML = '';
-            var cases = [
-                {{ id: 1, name: 'Обычный кейс', emoji: '📦', price: 1000, currency: 'монет' }},
-                {{ id: 2, name: 'Золотой кейс', emoji: '🎁', price: 10000, currency: 'монет' }},
-                {{ id: 3, name: 'Алмазный кейс', emoji: '💎', price: 50, currency: 'алмазов' }}
-            ];
-            for (var i = 0; i < cases.length; i++) {{
-                var caseItem = cases[i];
+            for (var i = 0; i < data.cases.length; i++) {{
+                var c = data.cases[i];
+                var price = c.price_clicks > 0 ? c.price_clicks + ' монет' : c.price_gems + ' алмазов';
                 var div = document.createElement('div');
                 div.className = 'case-item';
-                div.innerHTML = '<div class="case-emoji">' + caseItem.emoji + '</div><div class="case-name">' + caseItem.name + '</div><div class="case-price">Цена: ' + caseItem.price + ' ' + caseItem.currency + '</div>';
-                div.onclick = (function(id) {{
-                    return function() {{ openCase(id); }};
-                }})(caseItem.id);
+                div.innerHTML = '<div class="case-emoji">' + c.emoji + '</div><div class="case-name">' + c.name + '</div><div class="case-price">Цена: ' + price + '</div>';
+                div.onclick = (function(id) {{ return function() {{ openCase(id); }}; }})(c.id);
                 casesList.appendChild(div);
             }}
         }}
@@ -1203,7 +740,7 @@ async def upgrade_tap(user_id: int):
                 tg.showPopup({{ title: '🎁 Открытие кейса!', message: data.case_emoji + ' Вы получили: ' + data.reward_text, buttons: [{{type: 'ok'}}] }});
                 await loadStats();
             }} else {{
-                tg.showPopup({{ title: '❌ Не хватает ресурсов', message: 'Нужно: ' + data.need + ' ' + data.currency, buttons: [{{type: 'ok'}}] }});
+                tg.showPopup({{ title: '❌ Не хватает ресурсов', message: 'Нужно больше монет или алмазов', buttons: [{{type: 'ok'}}] }});
             }}
         }}
         
@@ -1227,16 +764,12 @@ async def upgrade_tap(user_id: int):
                     equipBtn.style.marginLeft = '8px';
                     equipBtn.style.background = '#ff9800';
                     equipBtn.innerHTML = '⚡ Экипировать';
-                    equipBtn.onclick = (function(id) {{
-                        return function() {{ equipSkin(id); }};
-                    }})(skin.id);
+                    equipBtn.onclick = (function(id) {{ return function() {{ equipSkin(id); }}; }})(skin.id);
                     div.appendChild(equipBtn);
                 }} else {{
                     btn.className = 'skin-btn';
                     btn.innerHTML = '💎 Купить';
-                    btn.onclick = (function(id) {{
-                        return function() {{ buySkin(id); }};
-                    }})(skin.id);
+                    btn.onclick = (function(id) {{ return function() {{ buySkin(id); }}; }})(skin.id);
                     div.appendChild(btn);
                 }}
                 skinsList.appendChild(div);
@@ -1251,7 +784,7 @@ async def upgrade_tap(user_id: int):
                 await loadStats();
                 await loadSkins();
             }} else {{
-                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно больше монет', buttons: [{{type: 'ok'}}] }});
             }}
         }}
         
@@ -1284,14 +817,14 @@ async def upgrade_tap(user_id: int):
         }}
         
         async function buyBooster() {{
-            var res = await fetch('/api/buy_booster?user_id=' + userId + '&booster_id=1', {{ method: 'POST' }});
+            var res = await fetch('/api/buy_booster?user_id=' + userId, {{ method: 'POST' }});
             var data = await res.json();
             if (data.success) {{
                 tg.showPopup({{ title: '✅ Бустер активирован!', message: data.booster_emoji + ' ' + data.booster_name + ' активирован!', buttons: [{{type: 'ok'}}] }});
                 await loadStats();
                 await loadBoosters();
             }} else {{
-                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: ' + data.need + ' монет', buttons: [{{type: 'ok'}}] }});
+                tg.showPopup({{ title: '❌ Не хватает монет', message: 'Нужно: 5000 монет', buttons: [{{type: 'ok'}}] }});
             }}
         }}
         
@@ -1329,9 +862,7 @@ async def upgrade_tap(user_id: int):
                     var player = data.leaderboard[i];
                     var div = document.createElement('div');
                     div.className = 'leaderboard-item';
-                    div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span>' +
-                                    '<span class="leaderboard-name">' + player.username + '</span>' +
-                                    '<span class="leaderboard-clicks">' + player.balance + '💰</span>';
+                    div.innerHTML = '<span class="leaderboard-rank">' + (i+1) + '</span><span class="leaderboard-name">' + player.username + '</span><span class="leaderboard-clicks">' + player.balance + '💰</span>';
                     leaderboardList.appendChild(div);
                 }}
             }} catch(e) {{
@@ -1347,34 +878,16 @@ async def upgrade_tap(user_id: int):
         }}, 2000);
         
         loadStats();
-
-                document.getElementById('shareBtn').onclick = async function() {{
-            var imgUrl = '/api/share_image?user_id=' + userId;
-            
-            tg.showPopup({{
-                title: '📤 Поделиться прогрессом',
-                message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
-                buttons: [
-                    {{type: 'default', text: '📤 Поделиться'}},
-                    {{type: 'cancel', text: 'Отмена'}}
-                ]
-            }}, function(buttonId) {{
-                if (buttonId === '0') {{
-                    tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
-                }}
-            }});
-        }};
-
     </script>
 </body>
 </html>
-"""            
+"""
+    
     return HTMLResponse(content=html)
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-if __name__ == "__main__":
+    
+    
+    
+    if __name__ == "__main__":
+    import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
