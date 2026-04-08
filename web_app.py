@@ -228,7 +228,6 @@ async def get_booster_multiplier(user_id: int):
             multiplier *= b["effect_value"]
     return multiplier
 
-<<<<<<< HEAD
 async def upgrade_tap_power(user_id: int):
 =======
 async def get_user_username(user_id: int):
@@ -260,7 +259,6 @@ async def update_daily_clicks(user_id: int, increment: int):
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
->>>>>>> 5d33dda (Финальная версия бота)
     stats = await get_user_stats(user_id)
     price = stats["profit_per_tap"] * 100
     if stats["balance"] >= price:
