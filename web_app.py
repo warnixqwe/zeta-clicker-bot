@@ -228,7 +228,39 @@ async def get_booster_multiplier(user_id: int):
             multiplier *= b["effect_value"]
     return multiplier
 
+<<<<<<< HEAD
 async def upgrade_tap_power(user_id: int):
+=======
+async def get_user_username(user_id: int):
+    try:
+        from aiogram import Bot
+        bot = Bot(token=os.getenv("BOT_TOKEN"))
+        user = await bot.get_chat(user_id)
+        await bot.session.close()
+        return user.username or str(user_id)
+    except:
+        return str(user_id)
+
+@app.post("/api/click")
+async def handle_click(data: ClickData):
+    multiplier = await get_booster_multiplier(data.user_id)
+    final_clicks = int(data.clicks * multiplier)
+    await update_balance(data.user_id, final_clicks)
+    stats = await get_user_stats(data.user_id)
+    return stats
+async def update_daily_clicks(user_id: int, increment: int):
+    conn = await get_connection()
+    today = datetime.now().date()
+    await conn.execute("""
+        INSERT INTO daily_stats (user_id, clicks_today, date)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, date) DO UPDATE SET clicks_today = daily_stats.clicks_today + $2
+    """, user_id, increment, today)
+    await conn.close()
+
+@app.post("/api/upgrade_tap")
+async def upgrade_tap(user_id: int):
+>>>>>>> 5d33dda (Финальная версия бота)
     stats = await get_user_stats(user_id)
     price = stats["profit_per_tap"] * 100
     if stats["balance"] >= price:
@@ -627,6 +659,7 @@ async def mini_app(user_id: int = 1):
                 <div class="balance-row">
                     <span class="balance-label">💰 Баланс</span>
                     <span class="balance-value" id="balance">{stats["balance"]}</span>
+                    <button class="copy-btn" id="donateBtn" style="background: linear-gradient(135deg, #f5af19, #f12711);">⭐ Поддержать (Telegram Stars)</button>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
@@ -1048,6 +1081,51 @@ async def mini_app(user_id: int = 1):
         }}, 2000);
         
         loadStats();
+<<<<<<< HEAD
+=======
+
+                document.getElementById('shareBtn').onclick = async function() {{
+            var imgUrl = '/api/share_image?user_id=' + userId;
+            
+            tg.showPopup({{
+                title: '📤 Поделиться прогрессом',
+                message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
+                buttons: [
+                    {{type: 'default', text: '📤 Поделиться'}},
+                    {{type: 'cancel', text: 'Отмена'}}
+                ]
+            }}, function(buttonId) {{
+                if (buttonId === '0') {{
+                    tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
+                }}
+            }});
+        }};
+
+                document.getElementById('donateBtn').onclick = function() {
+            tg.showPopup({
+                title: 'Поддержать проект',
+                message: 'Выбери сумму в Telegram Stars:',
+                buttons: [
+                    {id: '10', type: 'default', text: '⭐ 10 Stars'},
+                    {id: '50', type: 'default', text: '⭐ 50 Stars'},
+                    {id: '100', type: 'default', text: '⭐ 100 Stars'},
+                    {type: 'cancel', text: 'Отмена'}
+                ]
+            }, function(buttonId) {
+                if (buttonId && buttonId !== 'cancel') {
+                    tg.openInvoice({
+                        title: 'Поддержка Zeta Clicker',
+                        description: `Донат ${buttonId} Telegram Stars`,
+                        payload: JSON.stringify({user_id: userId, stars: parseInt(buttonId)}),
+                        provider_token: '',  // для Stars пустая строка
+                        currency: 'XTR',
+                        prices: [{label: 'Telegram Stars', amount: parseInt(buttonId)}]
+                    });
+                }
+            });
+        };
+
+>>>>>>> 5d33dda (Финальная версия бота)
     </script>
 </body>
 </html>
