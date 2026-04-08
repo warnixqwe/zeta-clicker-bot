@@ -411,7 +411,7 @@ async def handle_share(message: types.Message):
             caption=f"🦆 Я накликал {data.get('balance', 0)} монет в Zeta Clicker!\nПрисоединяйся: t.me/ZetaClickerRobot?start=ref_{user_id}"
         )
 
-        @router.pre_checkout_query()
+@router.pre_checkout_query()
 async def process_pre_checkout(query: PreCheckoutQuery):
     await query.answer(ok=True)
 
