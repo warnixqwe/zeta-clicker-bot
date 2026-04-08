@@ -8,8 +8,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import CommandStart
-
 from config import BOT_TOKEN, ADMIN_ID
+import json
+from aiogram.types import WebAppData
 
 router = Router()
 bot = Bot(token=BOT_TOKEN)
@@ -502,3 +503,14 @@ async def buy_clicks_gems(callback: types.CallbackQuery):
         await callback.answer(f"❌ Не хватает алмазов! Нужно 10, у тебя {gems}", show_alert=True)
     await conn.close()
     await gems_shop(callback)
+
+@router.message(lambda message: message.web_app_data is not None)
+async def handle_web_app_data(message: types.Message):
+    data = json.loads(message.web_app_data.data)
+    if data.get('action') == 'share':
+        user_id = data.get('user_id')
+        image_url = f"https://zeta-clicker-bot-production-3a3b.up.railway.app/api/share_image?user_id={user_id}"
+        await message.answer_photo(
+            photo=image_url,
+            caption=f"🦆 Присоединяйся к Zeta Clicker!\nhttps://t.me/ZetaClickerRobot?start=ref_{user_id}"
+        )

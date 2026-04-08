@@ -1079,58 +1079,46 @@ async def mini_app(user_id: int = 1):
         }}, 2000);
         
         loadStats();
-<<<<<<< HEAD
-=======
 
-                document.getElementById('shareBtn').onclick = async function() {{
-            var imgUrl = '/api/share_image?user_id=' + userId;
-            
-            tg.showPopup({{
-                title: '📤 Поделиться прогрессом',
-                message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
-                buttons: [
-                    {{type: 'default', text: '📤 Поделиться'}},
-                    {{type: 'cancel', text: 'Отмена'}}
-                ]
-            }}, function(buttonId) {{
-                if (buttonId === '0') {{
-                    tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
+            document.getElementById('shareBtn').onclick = function() {{
+                var imgUrl = '/api/share_image?user_id=' + userId;
+                tg.showPopup({{
+                    title: '📤 Поделиться прогрессом',
+                    message: 'Нажми "Поделиться", чтобы отправить картинку другу!',
+                    buttons: [
+                        {{type: 'default', text: '📤 Поделиться'}},
+                        {{type: 'cancel', text: 'Отмена'}}
+                    ]
+                }}, function(buttonId) {{
+                    if (buttonId === '0') {{
+                        tg.sendData(JSON.stringify({{ action: 'share', user_id: userId }}));
                 }}
             }});
         }};
 
-                document.getElementById('donateBtn').onclick = function() {
-<<<<<<< HEAD
+                document.getElementById('donateBtn').onclick = function() {{
             tg.showPopup({{
-=======
-            tg.showPopup({
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
                 title: 'Поддержать проект',
                 message: 'Выбери сумму в Telegram Stars:',
                 buttons: [
-                    {id: '10', type: 'default', text: '⭐ 10 Stars'},
-                    {id: '50', type: 'default', text: '⭐ 50 Stars'},
-                    {id: '100', type: 'default', text: '⭐ 100 Stars'},
-                    {type: 'cancel', text: 'Отмена'}
+                    {{id: '10', type: 'default', text: '⭐ 10 Stars'}},
+                    {{id: '50', type: 'default', text: '⭐ 50 Stars'}},
+                    {{id: '100', type: 'default', text: '⭐ 100 Stars'}},
+                    {{type: 'cancel', text: 'Отмена'}}
                 ]
-            }, function(buttonId) {
-                if (buttonId && buttonId !== 'cancel') {
-                    tg.openInvoice({
+            }}, function(buttonId) {{
+                if (buttonId && buttonId !== 'cancel') {{
+                    tg.openInvoice({{
                         title: 'Поддержка Zeta Clicker',
-                        description: `Донат ${buttonId} Telegram Stars`,
-                        payload: JSON.stringify({user_id: userId, stars: parseInt(buttonId)}),
-                        provider_token: '',  // для Stars пустая строка
+                        description: 'Донат ' + buttonId + ' Telegram Stars',
+                        payload: JSON.stringify({{user_id: userId, stars: parseInt(buttonId)}}),
+                        provider_token: '',
                         currency: 'XTR',
-                        prices: [{label: 'Telegram Stars', amount: parseInt(buttonId)}]
-                    });
-                }
-            });
-        };
-
-<<<<<<< HEAD
->>>>>>> 5d33dda (Финальная версия бота)
-=======
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
+                        prices: [{{label: 'Telegram Stars', amount: parseInt(buttonId)}}]
+                }}
+            }});
+        }};
+        
     </script>
 </body>
 </html>

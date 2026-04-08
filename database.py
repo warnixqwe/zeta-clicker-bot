@@ -30,19 +30,13 @@ async def init_db():
             energy INTEGER DEFAULT 1000,
             max_energy INTEGER DEFAULT 1000,
             gems INTEGER DEFAULT 0,
-<<<<<<< HEAD
             total_clicks BIGINT DEFAULT 0,
             daily_streak INTEGER DEFAULT 0,
             last_daily TIMESTAMP DEFAULT NULL,
             current_skin TEXT DEFAULT '🦆'
-=======
             total_gems INTEGER DEFAULT 0
             ALTER TABLE users ADD COLUMN last_energy_update TIMESTAMP DEFAULT now();
             ALTER TABLE users ADD COLUMN last_passive_notify TIMESTAMP DEFAULT NULL;
-<<<<<<< HEAD
->>>>>>> 5d33dda (Финальная версия бота)
-=======
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
         )
     """)
     
@@ -165,9 +159,7 @@ async def init_db():
     
     await conn.close()
 
-<<<<<<< HEAD
 async def get_user_stats(user_id: int):
-=======
    # Таблица ежедневной статистики (топ)
     await conn.execute("""
     CREATE TABLE IF NOT EXISTS daily_stats (
@@ -201,7 +193,6 @@ async def get_user_stats(user_id: int):
 # ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
 
 async def get_user_stats(user_id: int) -> Tuple:
->>>>>>> 5d33dda (Финальная версия бота)
     conn = await get_connection()
     row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
     if not row:
@@ -227,10 +218,8 @@ async def get_user_stats(user_id: int) -> Tuple:
         "current_skin": row["current_skin"] if row["current_skin"] else "🦆"
     }
 
-<<<<<<< HEAD
 async def update_clicks(user_id: int, increment: int):
     """Обновляет баланс и энергию при клике"""
-=======
 async def regenerate_energy(user_id: int):
     conn = await get_connection()
     row = await conn.fetchrow("SELECT energy, max_energy, last_energy_update FROM users WHERE user_id = $1", user_id)
@@ -281,7 +270,6 @@ async def update_tap(user_id: int, energy_cost: int = 1, tap_bonus: int = 0) -> 
     return (new_clicks, new_level, new_energy)
 
 async def add_clicks(user_id: int, amount: int):
->>>>>>> 5d33dda (Финальная версия бота)
     conn = await get_connection()
     await conn.execute("""
         UPDATE users 
@@ -292,10 +280,8 @@ async def add_clicks(user_id: int, amount: int):
     """, increment, user_id)
     await conn.close()
 
-<<<<<<< HEAD
 async def add_referral(referrer_id: int, referred_id: int) -> bool:
     if referrer_id == referred_id:
-=======
 async def add_gems(user_id: int, amount: int):
     conn = await get_connection()
     await conn.execute("""
@@ -339,7 +325,6 @@ async def claim_daily_bonus(user_id: int):
 
 async def add_referral(user_id: int, referrer_id: int) -> bool:
     if user_id == referrer_id:
->>>>>>> 5d33dda (Финальная версия бота)
         return False
     conn = await get_connection()
     try:
@@ -442,10 +427,8 @@ async def equip_skin(user_id: int, skin_id: int):
 
 async def open_case(user_id: int, case_id: int):
     conn = await get_connection()
-<<<<<<< HEAD
     case = await conn.fetchrow("SELECT name, emoji, price_clicks, price_gems FROM cases WHERE id = $1", case_id)
     if not case:
-=======
     row = await conn.fetchrow("SELECT clicks, tap_power FROM users WHERE user_id = $1", user_id)
     
     price = row['tap_power'] * 100
@@ -457,10 +440,7 @@ async def open_case(user_id: int, case_id: int):
             UPDATE users SET clicks = $1, tap_power = $2 WHERE user_id = $3
         """, new_clicks, new_tap_power, user_id)
         await check_referral_activity(user_id, new_profit)
-<<<<<<< HEAD
->>>>>>> 5d33dda (Финальная версия бота)
-=======
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
+
         await conn.close()
         return (False, None, None, None)
     stats = await get_user_stats(user_id)
@@ -486,8 +466,6 @@ async def open_case(user_id: int, case_id: int):
     elif selected["reward_type"] == "skin":
         await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", user_id, selected["reward_value"])
     await conn.close()
-<<<<<<< HEAD
-<<<<<<< HEAD
     return (True, selected["reward_text"], case["emoji"], None)
 
 async def get_cases():
@@ -542,12 +520,7 @@ async def get_leaderboard(limit: int = 10):
         except:
             pass
         leaderboard.append({"user_id": user_id, "username": username, "balance": row["balance"], "clicks": row["total_clicks"]})
-    return leaderboard 
-    
-     
-=======
-=======
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
+    return leaderboard     
     return True
 
 async def check_referral_activity(referred_id: int, new_tap_power: int):
@@ -589,9 +562,4 @@ async def award_daily_top():
         if bonus:
             await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", bonus, row["user_id"])
             await bot.send_message(row["user_id"], f"🏆 **Топ дня!** Ты занял {i+1} место и получил {bonus} монет!")
-<<<<<<< HEAD
     await conn.close()
->>>>>>> 5d33dda (Финальная версия бота)
-=======
-    await conn.close()
->>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
