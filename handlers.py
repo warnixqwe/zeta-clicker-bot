@@ -106,9 +106,9 @@ async def cmd_admin(message: types.Message):
     )
 
 @router.callback_query(lambda c: c.data == "admin_stats")
-async def admin_stats(callback: types.CallbackQuery):
+async def admin_stats(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
-        await callback.answer("Нет прав!", show_alert=True)
+        await callback.answer("Нет прав", show_alert=True)
         return
     
     conn = sqlite3.connect("zeta_clicker.db")
@@ -132,7 +132,7 @@ async def admin_stats(callback: types.CallbackQuery):
     await callback.answer()
 
 @router.callback_query(lambda c: c.data == "admin_broadcast")
-async def admin_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
+async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет прав!", show_alert=True)
         return
@@ -187,7 +187,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     )
 
 @router.callback_query(lambda c: c.data == "admin_add_gems")
-async def admin_add_gems_start(callback: types.CallbackQuery):
+async def admin_add_clicks(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет прав!", show_alert=True)
         return
@@ -227,7 +227,7 @@ async def admin_add_gems_process(message: types.Message):
     await message.answer(f"✅ Пользователю `{user_id}` начислено `{amount}` алмазов!", parse_mode="Markdown")
 
 @router.callback_query(lambda c: c.data == "admin_add_clicks")
-async def admin_add_clicks_start(callback: types.CallbackQuery):
+async def admin_add_clicks(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Нет прав!", show_alert=True)
         return
@@ -409,3 +409,96 @@ async def handle_share(message: types.Message):
             photo=image_url,
             caption=f"🦆 Я накликал {data.get('balance', 0)} монет в Zeta Clicker!\nПрисоединяйся: t.me/ZetaClickerRobot?start=ref_{user_id}"
         )
+
+        @router.pre_checkout_query()
+async def process_pre_checkout(query: PreCheckoutQuery):
+    await query.answer(ok=True)
+
+@router.message(lambda msg: msg.successful_payment)
+async def on_successful_payment(message: types.Message):
+    user_id = message.from_user.id
+    stars = message.successful_payment.total_amount
+    # Начисляем бонус: например, 1000 монет за 1 звезду
+    bonus = stars * 1000
+    conn = await get_connection()
+    await conn.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", bonus, user_id)
+    await conn.close()
+    await message.answer(f"✅ Спасибо за поддержку! Ты получил {bonus} монет.")
+
+    # Кнопка в главном меню
+@router.callback_query(lambda c: c.data == "gems_shop")
+async def gems_shop(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    conn = await get_connection()
+    gems = await conn.fetchval("SELECT gems FROM users WHERE user_id = $1", user_id)
+    await conn.close()
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💎 Алмазная утка (+20 к силе) — 50💎", callback_data="buy_skin_gems_6")],
+        [InlineKeyboardButton(text="⚡ Бустер x2 на 1 час — 30💎", callback_data="buy_booster_gems_2")],
+        [InlineKeyboardButton(text="🎁 10 000 монет — 10💎", callback_data="buy_clicks_gems")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")]
+    ])
+    
+    await callback.message.edit_text(
+        f"💎 **Магазин алмазов**\nУ тебя: {gems} 💎\n\n"
+        "✨ **Предложения:**\n"
+        "• Алмазная утка +20 к силе (50💎)\n"
+        "• Бустер x2 на 1 час (30💎)\n"
+        "• 10 000 монет (10💎)",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+    @router.callback_query(lambda c: c.data == "buy_skin_gems_6")
+async def buy_skin_gems(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    conn = await get_connection()
+    gems = await conn.fetchval("SELECT gems FROM users WHERE user_id = $1", user_id)
+    
+    if gems >= 50:
+        new_gems = gems - 50
+        # Добавляем скин (id=6 — алмазная утка)
+        await conn.execute("UPDATE users SET gems = $1 WHERE user_id = $2", new_gems, user_id)
+        await conn.execute("INSERT INTO user_skins (user_id, skin_id) VALUES ($1, 6) ON CONFLICT DO NOTHING", user_id)
+        await callback.answer("✅ Ты купил Алмазную утку! Теперь экипируй её в магазине скинов.", show_alert=True)
+    else:
+        await callback.answer(f"❌ Не хватает алмазов! Нужно 50, у тебя {gems}", show_alert=True)
+    await conn.close()
+    await gems_shop(callback)
+
+@router.callback_query(lambda c: c.data == "buy_booster_gems_2")
+async def buy_booster_gems(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    conn = await get_connection()
+    gems = await conn.fetchval("SELECT gems FROM users WHERE user_id = $1", user_id)
+    
+    if gems >= 30:
+        new_gems = gems - 30
+        expires_at = datetime.now() + timedelta(hours=1)
+        await conn.execute("UPDATE users SET gems = $1 WHERE user_id = $2", new_gems, user_id)
+        await conn.execute("""
+            INSERT INTO user_boosters (user_id, booster_id, expires_at) 
+            VALUES ($1, 1, $2) 
+            ON CONFLICT (user_id, booster_id) DO UPDATE SET expires_at = EXCLUDED.expires_at
+        """, user_id, expires_at)
+        await callback.answer("✅ Бустер x2 активирован на 1 час!", show_alert=True)
+    else:
+        await callback.answer(f"❌ Не хватает алмазов! Нужно 30, у тебя {gems}", show_alert=True)
+    await conn.close()
+    await gems_shop(callback)
+
+@router.callback_query(lambda c: c.data == "buy_clicks_gems")
+async def buy_clicks_gems(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    conn = await get_connection()
+    gems = await conn.fetchval("SELECT gems FROM users WHERE user_id = $1", user_id)
+    
+    if gems >= 10:
+        new_gems = gems - 10
+        await conn.execute("UPDATE users SET gems = $1, balance = balance + 10000 WHERE user_id = $2", new_gems, user_id)
+        await callback.answer("✅ +10 000 монет зачислено!", show_alert=True)
+    else:
+        await callback.answer(f"❌ Не хватает алмазов! Нужно 10, у тебя {gems}", show_alert=True)
+    await conn.close()
+    await gems_shop(callback)

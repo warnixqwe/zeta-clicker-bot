@@ -278,6 +278,15 @@ async def handle_click(data: ClickData):
     await update_balance(data.user_id, final_clicks)
     stats = await get_user_stats(data.user_id)
     return stats
+async def update_daily_clicks(user_id: int, increment: int):
+    conn = await get_connection()
+    today = datetime.now().date()
+    await conn.execute("""
+        INSERT INTO daily_stats (user_id, clicks_today, date)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, date) DO UPDATE SET clicks_today = daily_stats.clicks_today + $2
+    """, user_id, increment, today)
+    await conn.close()
 
 @app.post("/api/upgrade_tap")
 async def upgrade_tap(user_id: int):
@@ -938,6 +947,7 @@ async def upgrade_tap(user_id: int):
                 <button class="btn" id="shareBtn">📤 Поделиться</button>
                     <span class="balance-label">💰 Баланс</span>
                     <span class="balance-value" id="balance">{stats["balance"]}</span>
+                    <button class="copy-btn" id="donateBtn" style="background: linear-gradient(135deg, #f5af19, #f12711);">⭐ Поддержать (Telegram Stars)</button>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-item">
@@ -1368,6 +1378,30 @@ async def upgrade_tap(user_id: int):
                 }}
             }});
         }};
+
+                document.getElementById('donateBtn').onclick = function() {
+            tg.showPopup({
+                title: 'Поддержать проект',
+                message: 'Выбери сумму в Telegram Stars:',
+                buttons: [
+                    {id: '10', type: 'default', text: '⭐ 10 Stars'},
+                    {id: '50', type: 'default', text: '⭐ 50 Stars'},
+                    {id: '100', type: 'default', text: '⭐ 100 Stars'},
+                    {type: 'cancel', text: 'Отмена'}
+                ]
+            }, function(buttonId) {
+                if (buttonId && buttonId !== 'cancel') {
+                    tg.openInvoice({
+                        title: 'Поддержка Zeta Clicker',
+                        description: `Донат ${buttonId} Telegram Stars`,
+                        payload: JSON.stringify({user_id: userId, stars: parseInt(buttonId)}),
+                        provider_token: '',  // для Stars пустая строка
+                        currency: 'XTR',
+                        prices: [{label: 'Telegram Stars', amount: parseInt(buttonId)}]
+                    });
+                }
+            });
+        };
 
     </script>
 </body>
