@@ -33,8 +33,8 @@ async def init_db():
             total_clicks BIGINT DEFAULT 0,
             daily_streak INTEGER DEFAULT 0,
             last_daily TIMESTAMP DEFAULT NULL,
+            last_energy_update TIMESTAMP DEFAULT NULL,
             current_skin TEXT DEFAULT '🦆'
-            total_gems INTEGER DEFAULT 0
             ALTER TABLE users ADD COLUMN last_energy_update TIMESTAMP DEFAULT now();
             ALTER TABLE users ADD COLUMN last_passive_notify TIMESTAMP DEFAULT NULL;
         )
