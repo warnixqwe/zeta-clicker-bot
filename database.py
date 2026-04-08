@@ -22,7 +22,7 @@ async def init_db():
     await conn.execute("DROP TABLE IF EXISTS users")
     
     await conn.execute("""
-        CREATE TABLE users (
+        CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY,
             balance BIGINT DEFAULT 0,
             profit_per_tap INTEGER DEFAULT 1,
@@ -35,8 +35,6 @@ async def init_db():
             last_daily TIMESTAMP DEFAULT NULL,
             last_energy_update TIMESTAMP DEFAULT NULL,
             current_skin TEXT DEFAULT '🦆'
-            ALTER TABLE users ADD COLUMN last_energy_update TIMESTAMP DEFAULT now();
-            ALTER TABLE users ADD COLUMN last_passive_notify TIMESTAMP DEFAULT NULL;
         )
     """)
     
