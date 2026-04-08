@@ -1102,7 +1102,11 @@ async def mini_app(user_id: int = 1):
         }};
 
                 document.getElementById('donateBtn').onclick = function() {
+<<<<<<< HEAD
             tg.showPopup({{
+=======
+            tg.showPopup({
+>>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
                 title: 'Поддержать проект',
                 message: 'Выбери сумму в Telegram Stars:',
                 buttons: [
@@ -1125,7 +1129,10 @@ async def mini_app(user_id: int = 1):
             });
         };
 
+<<<<<<< HEAD
 >>>>>>> 5d33dda (Финальная версия бота)
+=======
+>>>>>>> 5d33dda51baaf1f4d30f1100a0bde609ac96ae15
     </script>
 </body>
 </html>
