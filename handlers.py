@@ -451,7 +451,7 @@ async def gems_shop(callback: types.CallbackQuery):
         parse_mode="Markdown"
     )
 
-    @router.callback_query(lambda c: c.data == "buy_skin_gems_6")
+@router.callback_query(lambda c: c.data == "buy_skin_gems_6")
 async def buy_skin_gems(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     conn = await get_connection()
