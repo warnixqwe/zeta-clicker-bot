@@ -430,7 +430,7 @@ async def open_case(user_id: int, case_id: int):
     conn = await get_connection()
     case = await conn.fetchrow("SELECT name, emoji, price_clicks, price_gems FROM cases WHERE id = $1", case_id)
     if not case:
-    row = await conn.fetchrow("SELECT clicks, tap_power FROM users WHERE user_id = $1", user_id)
+        row = await conn.fetchrow("SELECT clicks, tap_power FROM users WHERE user_id = $1", user_id)
     
     price = row['tap_power'] * 100
     
