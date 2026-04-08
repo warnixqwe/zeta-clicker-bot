@@ -1102,7 +1102,7 @@ async def mini_app(user_id: int = 1):
         }};
 
                 document.getElementById('donateBtn').onclick = function() {
-            tg.showPopup({
+            tg.showPopup({{
                 title: 'Поддержать проект',
                 message: 'Выбери сумму в Telegram Stars:',
                 buttons: [
