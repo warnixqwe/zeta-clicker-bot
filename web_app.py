@@ -229,7 +229,35 @@ async def get_booster_multiplier(user_id: int):
     return multiplier
 
 async def upgrade_tap_power(user_id: int):
-=======
+    # Получаем текущую статистику игрока
+    stats = await get_user_stats(user_id)
+    
+    # Цена улучшения = текущая сила тапа * 100
+    price = stats["profit_per_tap"] * 100
+    
+    # Проверяем, хватает ли монет
+    if stats["balance"] >= price:
+        conn = await get_connection()
+        
+        # Списываем монеты
+        new_balance = stats["balance"] - price
+        
+        # Увеличиваем силу тапа на 1
+        new_profit = stats["profit_per_tap"] + 1
+        
+        # Обновляем базу данных
+        await conn.execute(
+            "UPDATE users SET balance = $1, profit_per_tap = $2 WHERE user_id = $3",
+            new_balance, new_profit, user_id
+        )
+        await conn.close()
+        
+        # Возвращаем (успех, новая сила, цена)
+        return (True, new_profit, price)
+    
+    # Если монет не хватает
+    return (False, stats["profit_per_tap"], price)
+
 async def get_user_username(user_id: int):
     try:
         from aiogram import Bot

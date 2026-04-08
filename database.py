@@ -282,6 +282,7 @@ async def add_clicks(user_id: int, amount: int):
 
 async def add_referral(referrer_id: int, referred_id: int) -> bool:
     if referrer_id == referred_id:
+        pass
 async def add_gems(user_id: int, amount: int):
     conn = await get_connection()
     await conn.execute("""
